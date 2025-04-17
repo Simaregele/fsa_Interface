@@ -1,0 +1,20 @@
+{
+    "api_base_url": "http://fsa.arko.one/api",
+    "auth_url": "http://fsa.arko.one/api/auth-api/token",
+    "search_endpoint": "/search-api/search",
+    "search_one_endpoint": "/api/search_one",
+    "document_endpoints": {
+        "declaration": "/search-api/documents/declaration",
+        "certificate": "/search-api/documents/certificate"
+    },
+    "sync_endpoints": {
+        "declaration": "/loader-api/sync-document/declaration",
+        "certificate": "/loader-api/sync-document/certificate"
+    },
+    "page_size": 20,
+    "max_retries": 3,
+    "timeout": 30,
+    "LOCAL_CERTIFICATE_API_URL": "http://localhost:8002",
+    "CERTIFICATE_API_URL": "http://91.92.136.247:8001",
+    "just_info": "LOCAL_CERTIFICATE_API_URL on 191, 210 in certificate generator"
+}
