@@ -1,6 +1,34 @@
 {
-    "api_base_url": "http://fsa.arko.one/api",
-    "auth_url": "http://fsa.arko.one/api/auth-api/token",
+    "mode": "local",
+    "services": {
+        "auth": {
+            "base_url": "http://localhost:8082",
+            "remote_url": "http://fsa.cargo-trans.pro/api/auth-api",
+            "endpoints": {
+                "token": "/token"
+            }
+        },
+        "registry": {
+            "base_url": "http://localhost:8081",
+            "remote_url": "http://fsa.cargo-trans.pro/api/search-api",
+            "endpoints": {
+                "search": "/search",
+                "search_one": "/search_one",
+                "document_by_number": "/documents/by-number",
+                "document_by_id": "/documents/{doc_type}/{doc_id}"
+            }
+        },
+        "document": {
+            "base_url": "http://localhost:8080",
+            "remote_url": "http://fsa.cargo-trans.pro/api/loader-api",
+            "endpoints": {
+                "update_document": "/documents/{doc_type}/{doc_id}",
+                "sync_document": "/sync-document/{doc_type}/{doc_id}"
+            }
+        }
+    },
+    "api_base_url": "http://fsa.cargo-trans.pro/api",
+    "auth_url": "http://fsa.cargo-trans.pro/api/auth-api/token",
     "search_endpoint": "/search-api/search",
     "search_one_endpoint": "/api/search_one",
     "document_endpoints": {

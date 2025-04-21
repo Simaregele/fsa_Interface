@@ -9,7 +9,7 @@ config = load_config()
 
 class Authenticator:
     def __init__(self):
-        self.api_url = config['auth_url']
+        self.api_url = config.get_service_url('auth', 'token')
         self.token_key = "jwt_token"
         self.token_expiry_key = "jwt_token_expiry"
         self.storage = CookieTokenStorage()

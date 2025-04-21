@@ -1,2 +1,17 @@
 env
 
+.python-version
+
+.env
+
+.env.local
+
+.env.development.local
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz
+
+API.md
