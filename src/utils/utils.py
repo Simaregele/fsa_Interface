@@ -14,3 +14,20 @@ def flatten_dict(d, parent_key='', sep='_'):
         else:
             items.append((new_key, v))
     return dict(items)
+
+
+
+def generate_fsa_url(doc_type: str, doc_id: str) -> str:
+    """
+    Генерирует URL для просмотра документа на сайте FSA.
+
+    Args:
+        doc_type: тип документа ('D' для декларации, 'C' для сертификата)
+        doc_id: идентификатор документа
+
+    Returns:
+        str: полный URL для просмотра документа
+    """
+    base_url = "https://pub.fsa.gov.ru/rss"
+    type_segment = "declaration" if doc_type == "D" else "certificate"
+    return f"{base_url}/{type_segment}/view/{doc_id}/manufacturer"

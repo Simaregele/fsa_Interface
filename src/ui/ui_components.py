@@ -1,29 +1,21 @@
 import streamlit as st
 import pandas as pd
-from src.utils.utils import format_date, flatten_dict
+import logging
+from src.utils.utils import format_date, flatten_dict, generate_fsa_url
 from src.api.api import update_document
+from src.manual_db_update.updater_handlers import process_table_changes
 from src.api.document_updater import DocumentUpdateRequest, Product, Manufacturer, Branch
 from typing import List, Dict, Any, Optional
+
+from src.ui.model import TableColumns
+
+# Настройка логгера
+logger = logging.getLogger(__name__)
 
 # Session state keys for tracking original and edited dataframes
 _ORIGINAL_DF_KEY: str = "original_results_df"
 _EDITED_DF_KEY: str = "edited_results_df"
 
-
-def generate_fsa_url(doc_type: str, doc_id: str) -> str:
-    """
-    Генерирует URL для просмотра документа на сайте FSA.
-
-    Args:
-        doc_type: тип документа ('D' для декларации, 'C' для сертификата)
-        doc_id: идентификатор документа
-
-    Returns:
-        str: полный URL для просмотра документа
-    """
-    base_url = "https://pub.fsa.gov.ru/rss"
-    type_segment = "declaration" if doc_type == "D" else "certificate"
-    return f"{base_url}/{type_segment}/view/{doc_id}/manufacturer"
 
 
 def display_search_form():
@@ -67,26 +59,27 @@ def display_search_form():
     }
 
 
-def display_results_table(items):
+def format_search_results(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Форматирует результаты поиска из API в формат, подходящий для отображения в таблице.
+    
+    Args:
+        items: Список элементов из результатов поиска API
+        
+    Returns:
+        Список форматированных элементов для отображения в таблице
+    """
     formatted_results = []
     for item in items:
         flat_item = flatten_dict(item)
-        tnveds = flat_item.get("Product_Tnveds", [])
-        # Проверка на None и преобразование в пустой список если None
-        if tnveds is None:
-            tnveds = []
         
-        # Получаем гендеры из Product.Genders
-        genders = flat_item.get("Product_Genders", [])
-        if genders is None:
-            genders = []
-                    
-        # Получаем бренды из Product.Brands
-        brands = flat_item.get("Product_Brands", [])
-        if brands is None:
-            brands = []
-            
-        # Получаем филиалы из Manufacturer.Branches
+        # Обработка списковых полей с проверкой на None
+        tnveds = flat_item.get("Product_Tnveds", []) or []
+        genders = flat_item.get("Product_Genders", []) or []
+        brands = flat_item.get("Product_Brands", []) or []
+        materials = flat_item.get("Product_Materials", []) or []
+        
+        # Формирование списка филиалов
         branches = []
         if "Manufacturer_Branches" in flat_item and flat_item["Manufacturer_Branches"]:
             for branch in flat_item["Manufacturer_Branches"]:
@@ -96,172 +89,173 @@ def display_results_table(items):
                     branches.append(f"{branch['Country']}")
 
         formatted_item = {
-            "Выбрать": False,
-            "ID": flat_item.get("ID", ""),  # Добавляем ID обратно, он нужен для обновления
-            "Ссылка": generate_fsa_url(flat_item.get("Type"), flat_item.get("ID")),
-            "Номер": flat_item.get("Number", ""),
-            "Тип": "Д" if flat_item.get("Type") == "D" else "С",
-            "Статус": flat_item.get("Status", ""),
-            "Дата регистрации": format_date(flat_item.get("RegistrationDate")),
-            "Действителен до": format_date(flat_item.get("ValidityPeriod")),
-            "Заявитель": flat_item.get("Applicant", ""),
-            "Производитель": flat_item.get("Manufacturer_Name", ""),
-            "Продукция": flat_item.get("Product_Name", ""),
-            "Описание": flat_item.get("Product_Description", ""),
-            "Страна продукта": flat_item.get("Product_Country", ""),
-            "ТН ВЭД": ", ".join(tnveds),  # Используем обработанное значение
-            "Пол": ", ".join(genders),  # Добавляем поле для гендеров
-            "Бренды": brands,  # Добавляем поле для брендов как список
-            "Филиалы": branches,  # Добавляем поле для филиалов как список
-            "Материалы": ", ".join(flat_item.get("Product_Materials", [])),
+            TableColumns.SELECT: False,
+            TableColumns.ID: flat_item.get("ID", ""),  # Добавляем ID обратно, он нужен для обновления
+            TableColumns.LINK: generate_fsa_url(flat_item.get("Type"), flat_item.get("ID")),
+            TableColumns.NUMBER: flat_item.get("Number", ""),
+            TableColumns.TYPE: "Д" if flat_item.get("Type") == "D" else "С",
+            TableColumns.STATUS: flat_item.get("Status", ""),
+            TableColumns.REGISTRATION_DATE: format_date(flat_item.get("RegistrationDate")),
+            TableColumns.VALID_UNTIL: format_date(flat_item.get("ValidityPeriod")),
+            TableColumns.APPLICANT: flat_item.get("Applicant", ""),
+            TableColumns.MANUFACTURER: flat_item.get("Manufacturer_Name", ""),
+            TableColumns.PRODUCT: flat_item.get("Product_Name", ""),
+            TableColumns.DESCRIPTION: flat_item.get("Product_Description", ""),
+            TableColumns.PRODUCT_COUNTRY: flat_item.get("Product_Country", ""),
+            TableColumns.TNVED: ", ".join(tnveds),  # Используем обработанное значение
+            TableColumns.GENDER: ", ".join(genders),  # Добавляем поле для гендеров
+            TableColumns.BRANDS: brands,  # Добавляем поле для брендов как список
+            TableColumns.BRANCHES: branches,  # Добавляем поле для филиалов как список
+            TableColumns.MATERIALS: ", ".join(flat_item.get("Product_Materials", [])),
         }
         formatted_results.append(formatted_item)
+    
+    return formatted_results
 
-    df = pd.DataFrame(formatted_results)
 
-    column_config = {
-        "Выбрать": st.column_config.CheckboxColumn(
-            "Выбрать",
+def create_table_column_config() -> Dict[str, Any]:
+    """
+    Создает конфигурацию столбцов для таблицы результатов поиска.
+    
+    Returns:
+        Словарь с конфигурацией столбцов для st.data_editor
+    """
+    return {
+        TableColumns.SELECT: st.column_config.CheckboxColumn(
+            TableColumns.SELECT,
             help="Выберите для просмотра подробной информации",
             default=False,
         ),
-        "ID": st.column_config.Column(
-            "ID",
+        TableColumns.ID: st.column_config.Column(
+            TableColumns.ID,
             help="Идентификатор документа",
-            disabled=True  # ID не должен редактироваться
+            disabled=True
         ),
-        "Ссылка": st.column_config.LinkColumn(
+        TableColumns.LINK: st.column_config.LinkColumn(
             "Ссылка на FSA",
             help="Ссылка на документ на сайте FSA",
             validate="^https://.*",
             max_chars=100,
             display_text="Открыть"
         ),
-        "Продукция": st.column_config.TextColumn(
-            "Продукция",
+        TableColumns.PRODUCT: st.column_config.TextColumn(
+            TableColumns.PRODUCT,
             help="Название продукта"
         ),
-        "Описание": st.column_config.TextColumn(
-            "Описание",
+        TableColumns.DESCRIPTION: st.column_config.TextColumn(
+            TableColumns.DESCRIPTION,
             help="Описание продукта",
             width="large"
         ),
-        "Страна продукта": st.column_config.TextColumn(
-            "Страна продукта",
+        TableColumns.PRODUCT_COUNTRY: st.column_config.TextColumn(
+            TableColumns.PRODUCT_COUNTRY,
             help="Страна происхождения продукта"
         ),
-        "ТН ВЭД": st.column_config.TextColumn(
-            "ТН ВЭД",
+        TableColumns.TNVED: st.column_config.TextColumn(
+            TableColumns.TNVED,
             help="Коды ТН ВЭД, разделенные запятыми"
         ),
-        "Пол": st.column_config.TextColumn(
-            "Пол",
+        TableColumns.GENDER: st.column_config.TextColumn(
+            TableColumns.GENDER,
             help="Коды пола, разделенные запятыми"
         ),
-        "Бренды": st.column_config.ListColumn(
-            "Бренды",
+        TableColumns.BRANDS: st.column_config.ListColumn(
+            TableColumns.BRANDS,
             help="Список брендов",
             width="medium"
         ),
-        "Филиалы": st.column_config.ListColumn(
-            "Филиалы",
+        TableColumns.BRANCHES: st.column_config.ListColumn(
+            TableColumns.BRANCHES,
             help="Филиалы производителя",
             width="medium"
         ),
-        "Материалы": st.column_config.TextColumn(
-            "Материалы",
+        TableColumns.MATERIALS: st.column_config.TextColumn(
+            TableColumns.MATERIALS,
             help="Материалы, разделенные запятыми"
         )
     }
 
-    # Все поля продукта теперь редактируемые
+
+
+
+def display_results_table(items: List[Dict[str, Any]]) -> pd.DataFrame:
+    """
+    Отображает результаты поиска в виде редактируемой таблицы.
+    
+    Args:
+        items: Список результатов поиска из API
+        
+    Returns:
+        DataFrame с отредактированными данными
+    """
+    # Форматируем результаты для отображения
+    formatted_results = format_search_results(items)
+    df = pd.DataFrame(formatted_results)
+    
+    # Создаем конфигурацию столбцов
+    column_config = create_table_column_config()
+    
+    # Определяем редактируемые столбцы
     editable_cols = {
-        "Продукция", "Описание", "Страна продукта", 
-        "ТН ВЭД", "Пол", "Бренды", "Материалы", "Филиалы"
+        TableColumns.PRODUCT, TableColumns.DESCRIPTION, TableColumns.PRODUCT_COUNTRY, 
+        TableColumns.TNVED, TableColumns.GENDER, TableColumns.BRANDS, TableColumns.MATERIALS, TableColumns.BRANCHES
     }
     
+    # Настраиваем остальные столбцы
     for col in df.columns:
         if col not in column_config:
             column_config[col] = st.column_config.Column(
                 col,
                 disabled=col not in editable_cols
             )
-
+    
+    # Отображаем редактор данных
     edited_df = st.data_editor(
         df,
         hide_index=True,
         column_config=column_config,
         use_container_width=True
     )
-
+    
     # Сохраняем оригинальную и отредактированную таблицы в сессию
     if _ORIGINAL_DF_KEY not in st.session_state:
         st.session_state[_ORIGINAL_DF_KEY] = df.copy()
     st.session_state[_EDITED_DF_KEY] = edited_df.copy()
-
+    
     # Кнопка отправки изменений
     if st.button("Отправить изменения"):
         original_df = st.session_state[_ORIGINAL_DF_KEY]
-        for idx, row in edited_df.iterrows():
-            orig_row = original_df.loc[idx]
-            
-            # Проверяем, были ли изменения в любом из редактируемых полей
-            if row["Выбрать"] and any(
-                row[col] != orig_row[col] for col in editable_cols if col in row and col in orig_row
-            ):
-                try:
-                    # Преобразуем текстовые поля в списки, где это необходимо
-                    materials_list = [m.strip() for m in row["Материалы"].split(",") if m.strip()]
-                    tnved_list = [t.strip() for t in row["ТН ВЭД"].split(",") if t.strip()]
-                    gender_list = [g.strip() for g in row["Пол"].split(",") if g.strip()]
-                    
-                    # Бренды могут быть как строкой, так и списком
-                    brands_list = row["Бренды"] if isinstance(row["Бренды"], list) else [row["Бренды"]] if row["Бренды"] else []
-                    
-                    # Обрабатываем филиалы, преобразуя их из строки формата "Страна: Название" в объекты Branch
-                    branches: List[Branch] = []
-                    if row["Филиалы"] and isinstance(row["Филиалы"], list):
-                        for branch_str in row["Филиалы"]:
-                            if ": " in branch_str:
-                                country, name = branch_str.split(": ", 1)
-                                branches.append(Branch(country=country, name=name))
-                            else:
-                                # Если нет имени, только страна
-                                branches.append(Branch(country=branch_str, name=""))
-                    
-                    # Создаем объект Product с использованием Pydantic модели
-                    product = Product(
-                        name=row["Продукция"],
-                        description=row["Описание"],
-                        country=row["Страна продукта"],
-                        tnveds=tnved_list,
-                        materials=materials_list,
-                        genders=gender_list,
-                        brands=brands_list
-                    )
-                    
-                    # Создаем объект Manufacturer
-                    manufacturer = Manufacturer(branches=branches)
-                    
-                    # Создаем запрос на обновление
-                    update_request = DocumentUpdateRequest(
-                        product=product,
-                        manufacturer=manufacturer
-                    )
-                    
-                    # Определяем тип документа
-                    doc_type_api = "declaration" if row["Тип"] == "Д" else "certificate"
-                    
-                    # Отправляем запрос на обновление
-                    update_document(row["ID"], doc_type_api, update_request)
-                    
-                except Exception as e:
-                    st.error(f"Ошибка при формировании запроса: {str(e)}")
-                    import traceback
-                    st.error(traceback.format_exc())
         
-        st.success("Изменения отправлены")
-
+        # Обрабатываем изменения и получаем результаты
+        results = process_table_changes(edited_df, original_df, editable_cols)
+        
+        # Обрабатываем результаты
+        success_count = 0
+        warning_count = 0
+        error_count = 0
+        
+        for result in results:
+            if result["success"] is True:
+                success_count += 1
+            elif result["success"] is False:
+                error_count += 1
+                if result.get("error"):
+                    st.error(f"{result['message']}: {result['error']}")
+                else:
+                    st.error(result['message'])
+            elif result["success"] is None and "не обнаружено фактических изменений" in result["message"]:
+                warning_count += 1
+                st.warning(result['message'])
+        
+        # Отображаем общую информацию о результатах
+        if success_count > 0:
+            st.success(f"Успешно обновлено документов: {success_count}")
+        
+        if error_count == 0 and warning_count == 0:
+            st.success("Все изменения успешно отправлены")
+        elif error_count > 0:
+            st.error(f"Ошибки при обновлении {error_count} документов")
+    
     return edited_df
 
 

@@ -32,10 +32,10 @@ class Product(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     country: Optional[str] = None
-    tnveds: List[str] = Field(default_factory=list)
-    materials: List[str] = Field(default_factory=list)
-    genders: List[str] = Field(default_factory=list)
-    brands: List[str] = Field(default_factory=list)
+    tnveds: List[str] = None
+    materials: List[str] = None
+    genders: List[str] = None
+    brands: List[str] = None
 
 class UserData(BaseModel):
     product: Optional[Product] = None
@@ -59,6 +59,30 @@ class DocumentUpdateRequest(BaseModel):
 
     class Config:
         extra = "ignore"
+        
+    def model_dump(self, **kwargs):
+        """Переопределяем метод для контроля исключения пустых полей"""
+        exclude_none = kwargs.get('exclude_none', False)
+        data = super().model_dump(**kwargs)
+        
+        # Если указано исключать None значения
+        if exclude_none:
+            # Если product существует, проверяем все его поля
+            if 'product' in data and isinstance(data['product'], dict):
+                for field in ['tnveds', 'materials', 'genders', 'brands']:
+                    if field in data['product'] and not data['product'][field]:
+                        data['product'].pop(field)
+                        
+                # Если после удаления пустых полей product пуст, удаляем его полностью
+                if not any(data['product'].values()):
+                    data.pop('product')
+                    
+            # Если manufacturer существует и у него пустые branches, удаляем его
+            if 'manufacturer' in data and isinstance(data['manufacturer'], dict):
+                if 'branches' in data['manufacturer'] and not data['manufacturer']['branches']:
+                    data.pop('manufacturer')
+                    
+        return data
 
 
 def update_document(
@@ -75,11 +99,11 @@ def update_document(
     payload = update_request.model_dump(exclude_none=True)
     response = requests.put(url, json=payload, headers=headers)
     if response.status_code == 200:
-        return DocumentResponse(**response.json())
+        return True
     elif response.status_code == 401:
         st.error("Ошибка аутентификации. Пожалуйста, войдите в систему снова.")
         st.session_state["authentication_status"] = False
         st.rerun()
     else:
         st.error(f"Ошибка при обновлении документа: {response.status_code}")
-        return None 
+        return False 
