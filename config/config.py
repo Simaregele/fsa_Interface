@@ -56,11 +56,22 @@ class Config:
             cls._instance = Config()
         return cls._instance
 
+    def get_service_url(self, service: str, endpoint: str, **path_vars) -> str:
+        """
+        Возвращает полный URL для указанного сервиса и эндпоинта,
+        используя base_url или remote_url в зависимости от config['mode'].
+        """
+        mode = self._config.get('mode')
+        svc = self._config['services'][service]
+        base = svc['remote_url'] if mode == 'remote' else svc['base_url']
+        url = base + svc['endpoints'][endpoint]
+        return url.format(**path_vars)
+
 
 # Для обратной совместимости
-def load_config() -> Dict[str, Any]:
+def load_config() -> Config:
     """
-    Функция для обратной совместимости.
-    Возвращает словарь с конфигурацией.
+    Функция для совместимости.
+    Возвращает экземпляр Config для доступа к методам и данным.
     """
-    return Config.get_instance()._config
+    return Config.get_instance()

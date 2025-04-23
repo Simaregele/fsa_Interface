@@ -1,8 +1,6 @@
 import requests
 import json
 from typing import Dict, Any, Union, Optional
-import sys
-import io
 import logging
 from config.config import load_config
 
@@ -11,9 +9,6 @@ config = load_config()
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 
 def utf8_encode_dict(data: Dict[str, Any]) -> Dict[str, Any]:

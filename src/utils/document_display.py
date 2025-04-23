@@ -1,6 +1,5 @@
 import streamlit as st
 from src.utils.document_download import display_document_download_button
-from src.api.document_file_creator import create_document_file
 
 def display_generated_documents_section(generated_documents, selected_details, selected_search_data):
     """

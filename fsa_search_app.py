@@ -55,16 +55,6 @@ def show_search_interface():
         st.session_state.search_params = {k: v for k, v in search_params.items() if v}
         st.session_state.current_page = 0
 
-    # col1, col2 = st.columns(2)
-    # with col1:
-    #     if st.button("Поиск одного наиболее релевантного документа"):
-    #         result = search_one_fsa(st.session_state.search_params)
-    #         if result:
-    #             st.subheader("Наиболее релевантный документ:")
-    #             st.json(result)
-    #         else:
-    #             st.warning("Не найдено подходящих документов.")
-
     if st.session_state.search_params:
         results = search_fsa(st.session_state.search_params, st.session_state.current_page)
 
