@@ -104,7 +104,7 @@ def format_search_results(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             TableColumns.PRODUCT_COUNTRY: flat_item.get("Product_Country", ""),
             TableColumns.TNVED: ", ".join(tnveds),  # Используем обработанное значение
             TableColumns.GENDER: ", ".join(genders),  # Добавляем поле для гендеров
-            TableColumns.BRANDS: brands,  # Добавляем поле для брендов как список
+            TableColumns.BRANDS: ", ".join(brands),  # Преобразуем список брендов в строку через запятую
             TableColumns.BRANCHES: branches,  # Добавляем поле для филиалов как список
             TableColumns.MATERIALS: ", ".join(flat_item.get("Product_Materials", [])),
         }
@@ -159,7 +159,7 @@ def create_table_column_config() -> Dict[str, Any]:
             TableColumns.GENDER,
             help="Коды пола, разделенные запятыми"
         ),
-        TableColumns.BRANDS: st.column_config.ListColumn(
+        TableColumns.BRANDS: st.column_config.TextColumn(
             TableColumns.BRANDS,
             help="Список брендов",
             width="medium"
