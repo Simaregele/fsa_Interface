@@ -22,19 +22,8 @@ def send_update_request(doc_id: str, doc_type: str, update_request_data: Dict[st
     """
     
     
-    logger.info(f"ID документа: {doc_id}, тип: {doc_type}")
-    logger.info(f"Измененные поля: {update_request_data.keys()}")
-    
-    # Отладочный вывод содержимого полей для отправки
-    for key, value in update_request_data.items():
-        if key == "product" and value:
-            logger.info(f"Product данные: {json.dumps(value.model_dump(), ensure_ascii=False, indent=2)}")
-        if key == "manufacturer" and value:
-            logger.info(f"Manufacturer данные: {json.dumps(value.model_dump(), ensure_ascii=False, indent=2)}")
-    
     # Создаем запрос на обновление
     update_request = DocumentUpdateRequest(**update_request_data)
-    logger.info(f"Итоговый запрос: {json.dumps(update_request.model_dump(exclude_none=True), ensure_ascii=False, indent=2)}")
     
     # Отправляем запрос на обновление
     response = update_document(doc_type, doc_id, update_request)
@@ -113,7 +102,7 @@ def process_product_changes(row, orig_row) -> Dict[str, Any]:
     
     # Проверяем и обрабатываем изменения в брендах
     if row[TableColumns.BRANDS] != orig_row[TableColumns.BRANDS]:
-        brands_list = row[TableColumns.BRANDS] if isinstance(row[TableColumns.BRANDS], list) else [row[TableColumns.BRANDS]] if row[TableColumns.BRANDS] else []
+        brands_list = [m.strip() for m in row[TableColumns.BRANDS].split(",") if m.strip()]
         product_changes["brands"] = brands_list
         
     return product_changes
