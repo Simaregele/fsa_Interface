@@ -28,6 +28,9 @@ def generate_fsa_url(doc_type: str, doc_id: str) -> str:
     Returns:
         str: полный URL для просмотра документа
     """
-    base_url = "https://pub.fsa.gov.ru/rss"
+    base_url = "https://pub.fsa.gov.ru/"
+    rss_or_rds = "rds" if doc_type == "D" else "rss"
     type_segment = "declaration" if doc_type == "D" else "certificate"
-    return f"{base_url}/{type_segment}/view/{doc_id}/manufacturer"
+    base_info_or_common = "common" if doc_type == "D" else "baseInfo"
+
+    return f"{base_url}{rss_or_rds}/{type_segment}/view/{doc_id}/{base_info_or_common}"
