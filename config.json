@@ -1,5 +1,5 @@
 {
-    "mode": "remote",
+    "mode": "local",
     "services": {
         "auth": {
             "base_url": "http://localhost:8082",
@@ -44,5 +44,6 @@
     "timeout": 30,
     "LOCAL_CERTIFICATE_API_URL": "http://localhost:8002",
     "CERTIFICATE_API_URL": "http://91.92.136.247:8001",
+    "USE_LOCAL_CERTIFICATE_API_URL": true,
     "just_info": "LOCAL_CERTIFICATE_API_URL on 191, 210 in certificate generator"
 }

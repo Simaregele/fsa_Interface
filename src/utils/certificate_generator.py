@@ -1,6 +1,6 @@
 import requests
 import json
-from typing import Dict, Any, Union, Optional
+from typing import Dict, Any, Union, Optional, Tuple
 import logging
 from config.config import load_config
 
@@ -171,44 +171,107 @@ def process_dates_and_personnel(data: Dict[str, Any]) -> Dict[str, str]:
     return result
 
 
-def generate_documents(details: Dict[str, Any], search_data: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bytes, str]]:
+def _prepare_request_data(details: Dict[str, Any], search_data: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """
+    Подготавливает данные для запроса и объединенные данные для логгирования/результата.
+
+    Args:
+        details (Dict[str, Any]): Основные детали документа.
+        search_data (Optional[Dict[str, Any]]): Дополнительные данные из поиска.
+
+    Returns:
+        Tuple[Dict[str, Any], Dict[str, Any]]: Кортеж (payload_for_request, merged_data_for_result).
+        `payload_for_request` содержит данные, закодированные в UTF-8 и обернутые в {"data": ...}.
+        `merged_data_for_result` содержит объединенные данные до UTF-8 кодирования payload.
+    """
+    merged_data_for_result = details.copy()
+    if search_data:
+        for key, value in search_data.items():
+            # Если исходный ключ из search_data не существует в merged_data_for_result (которое изначально равно details)
+            if key not in merged_data_for_result:
+                merged_data_for_result[f'search_{key}'] = value
+                # И если этот отсутствующий ключ был 'TNVED'
+                if key == 'TNVED':
+                    merged_data_for_result['tnved_codes'] = value
+    
+    # Данные для payload должны быть UTF-8 закодированы
+    data_for_payload = utf8_encode_dict(merged_data_for_result)
+    payload_for_request = {"data": data_for_payload}
+    
+    return payload_for_request, merged_data_for_result
+
+
+def document_preview(details: Dict[str, Any], search_data: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bytes, str]]:
+    pass
+
+
+def get_document_preview_json(details: Dict[str, Any], base_api_url: str, search_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Отправляет данные на эндпоинт предпросмотра и возвращает JSON ответ.
+
+    Args:
+        details (Dict[str, Any]): Основные детали документа.
+        base_api_url (str): Базовый URL API.
+        search_data (Optional[Dict[str, Any]]): Дополнительные данные из поиска.
+
+    Returns:
+        Dict[str, Any]: JSON ответ от сервера предпросмотра или пустой словарь в случае ошибки.
+    """
     try:
-        # Подготовка данных не меняется
-        merged_data = details.copy()
-        if search_data:
-            for key, value in search_data.items():
-                if key not in merged_data:
-                    merged_data[f'search_{key}'] = value
-                    if key == 'TNVED':
-                        merged_data['tnved_codes'] = value
+        payload, merged_data = _prepare_request_data(details, search_data)
 
-        utf8_data = utf8_encode_dict(merged_data)
-        payload = {"data": utf8_data}
+        preview_url = f"{base_api_url}/preview_documents"
+        response = requests.post(
+            preview_url,
+            json=payload,
+            headers={'Content-Type': 'application/json; charset=utf-8'}
+        )
+        response.raise_for_status()
+        
+        preview_json = response.json()
+        
+        logging.info("JSON для предпросмотра успешно получен для данных: %s (URL: %s)",
+                     merged_data.get('ID', '') or merged_data.get('search_ID', 'Unknown ID'), preview_url)
+        
+        return preview_json
 
+    except requests.RequestException as e:
+        error_url_info = f"{base_api_url}/preview_documents"
+        logging.error("Ошибка при получении JSON для предпросмотра (URL: %s): %s", error_url_info, str(e))
+        if hasattr(e, 'response') and e.response is not None:
+            logging.error("Статус код: %s", e.response.status_code)
+            logging.error("Содержимое ответа: %s", e.response.text)
+        return {}
+    except json.JSONDecodeError as e:
+        error_url_info = f"{base_api_url}/preview_documents"
+        logging.error("Ошибка декодирования JSON ответа для предпросмотра (URL: %s): %s", error_url_info, str(e))
+        if 'response' in locals() and response is not None:
+            logging.error("Содержимое ответа, вызвавшее ошибку: %s", response.text)
+        return {}
+
+
+def generate_documents(details: Dict[str, Any], base_api_url: str, search_data: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bytes, str]]:
+    try:
+        payload, merged_data = _prepare_request_data(details, search_data)
         # Отправка запроса
-        generate_url = f"{config['CERTIFICATE_API_URL']}/generate_documents"
+        generate_url = f"{base_api_url}/generate_documents"
         response = requests.post(
             generate_url,
             json=payload,
             headers={'Content-Type': 'application/json; charset=utf-8'}
         )
         response.raise_for_status()
-        
-        # Получаем список документов в новом формате
-        documents_list = response.json()  # Теперь это список словарей с type, format, name, url
-        
+        documents_list = response.json()
         result = {
-            'documents': documents_list,  # Сохраняем весь список документов
-            'merged_data': merged_data    
+            'documents': documents_list,
+            'merged_data': merged_data
         }
-        
-        logging.info("Документы успешно сгенерированы для данных: %s",
-                    merged_data.get('ID', '') or merged_data.get('search_ID', 'Unknown ID'))
-        
+        logging.info("Документы успешно сгенерированы для данных: %s (URL: %s)",
+                    merged_data.get('ID', '') or merged_data.get('search_ID', 'Unknown ID'), generate_url)
         return result
-
     except requests.RequestException as e:
-        logging.error("Ошибка при генерации документов: %s", str(e))
+        error_url_info = f"{base_api_url}/generate_documents"
+        logging.error("Ошибка при генерации документов (URL: %s): %s", error_url_info, str(e))
         if hasattr(e, 'response') and e.response is not None:
             logging.error("Статус код: %s", e.response.status_code)
             logging.error("Содержимое ответа: %s", e.response.text)

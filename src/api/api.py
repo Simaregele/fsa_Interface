@@ -67,11 +67,21 @@ def get_document_details(doc_id, doc_type):
 
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
-        # Получаем JSON из ответа
-        response_data = response.json()
-        # Добавляем поле docType
-        response_data['docType'] = doc_type
-        return response_data
+        try:
+            response_data = response.json()
+            # Проверяем, что response_data действительно словарь после парсинга JSON
+            if not isinstance(response_data, dict):
+                logger.error(f"API вернуло не словарь для doc_id {doc_id}, doc_type {doc_type}. Получено: {type(response_data)}, Данные: {response_data}")
+                st.error(f"Ошибка при обработке ответа от сервера: неверный формат данных.")
+                return None
+            
+            response_data['docType'] = doc_type
+            return response_data
+        except requests.exceptions.JSONDecodeError as e:
+            logger.error(f"Ошибка декодирования JSON для doc_id {doc_id}, doc_type {doc_type}: {e}")
+            logger.error(f"Содержимое ответа: {response.text}")
+            st.error(f"Ошибка при обработке ответа от сервера: неверный формат JSON.")
+            return None
     elif response.status_code == 401:
         st.error("Ошибка аутентификации. Пожалуйста, войдите в систему снова.")
         st.session_state["authentication_status"] = False
