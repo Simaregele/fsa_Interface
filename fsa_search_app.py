@@ -162,7 +162,7 @@ def show_search_interface():
                 st.rerun()
     
     with col_actions2:
-        if st.button("Сгенерировать файлы для выбранных", use_container_width=True):
+        if st.button("Сгенерировать файлы для выбранных документов", use_container_width=True):
             if not selected_items:
                 st.warning("Пожалуйста, выберите документы для генерации.")
             else:
