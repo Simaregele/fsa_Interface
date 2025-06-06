@@ -15,27 +15,33 @@ from src.utils.document_generator import generate_documents_for_selected, previe
 # Загружаем конфигурацию
 config = load_config()
 
-# --- НАЧАЛО: Логика выбора URL из конфигурации ---
-USE_LOCAL_API_URL_FLAG = config.get('USE_LOCAL_CERTIFICATE_API_URL', False) # Ожидаем булево значение
-CERTIFICATE_API_URL_TO_USE = ""
-if USE_LOCAL_API_URL_FLAG:
-    CERTIFICATE_API_URL_TO_USE = config.get('LOCAL_CERTIFICATE_API_URL')
-    if not CERTIFICATE_API_URL_TO_USE: # Фоллбэк, если LOCAL_CERTIFICATE_API_URL не указан в конфиге, но флаг USE_LOCAL_API_URL_FLAG = True
-        st.sidebar.warning("Флаг USE_LOCAL_CERTIFICATE_API_URL установлен в True, но LOCAL_CERTIFICATE_API_URL не найден в конфигурации. Используется основной CERTIFICATE_API_URL.")
-        CERTIFICATE_API_URL_TO_USE = config.get('CERTIFICATE_API_URL') # get вместо прямого доступа, чтобы избежать KeyError
-        st.sidebar.info(f"Генерация документов: СТАНДАРТНЫЙ URL (нет локального)")
-    else:
-        st.sidebar.info(f"Генерация документов: ЛОКАЛЬНЫЙ URL (из конфигурации)")
-elif not config.get('CERTIFICATE_API_URL'):
-    st.error("Ключ CERTIFICATE_API_URL не найден в конфигурационном файле! Приложение не может работать.")
-    st.stop()
-else:
-    CERTIFICATE_API_URL_TO_USE = config.get('CERTIFICATE_API_URL')
-    st.sidebar.info(f"Генерация документов: СТАНДАРТНЫЙ URL (из конфигурации)")
+# --- НАЧАЛО: Логика выбора URL из конфигурации (переработанная) ---
+# Строгое чтение флага из конфигурации без значений по умолчанию.
+use_local_flag = config.get('USE_LOCAL_CERTIFICATE_API_URL')
 
-if not CERTIFICATE_API_URL_TO_USE: # Дополнительная проверка, что URL вообще есть
-    st.error("URL для API генерации сертификатов не определен! Проверьте конфигурационный файл.")
-    st.stop() # Останавливаем приложение, если URL не определен
+# Проверяем, что флаг вообще существует в конфиге.
+if use_local_flag is None:
+    st.error("Критическая ошибка: Ключ 'USE_LOCAL_CERTIFICATE_API_URL' не найден в config.json. Невозможно определить, какой URL использовать.")
+    st.stop()
+
+if use_local_flag:
+    # Флаг установлен в true, ожидаем локальный URL.
+    CERTIFICATE_API_URL_TO_USE = config.get('LOCAL_CERTIFICATE_API_URL')
+    if CERTIFICATE_API_URL_TO_USE:
+        st.sidebar.info("Генерация документов: ЛОКАЛЬНЫЙ URL")
+    else:
+        # Ошибка: флаг true, но локальный URL не указан.
+        st.error("Критическая ошибка: Флаг 'USE_LOCAL_CERTIFICATE_API_URL' установлен в true, но ключ 'LOCAL_CERTIFICATE_API_URL' не найден в config.json.")
+        st.stop()
+else:
+    # Флаг установлен в false, ожидаем основной URL.
+    CERTIFICATE_API_URL_TO_USE = config.get('CERTIFICATE_API_URL')
+    if CERTIFICATE_API_URL_TO_USE:
+        st.sidebar.info("Генерация документов: СТАНДАРТНЫЙ URL")
+    else:
+        # Ошибка: флаг false, но основной URL не указан.
+        st.error("Критическая ошибка: Флаг 'USE_LOCAL_CERTIFICATE_API_URL' установлен в false, но ключ 'CERTIFICATE_API_URL' не найден в config.json.")
+        st.stop()
 # --- КОНЕЦ: Логика выбора URL из конфигурации ---
 
 def clear_generated_documents():
@@ -174,7 +180,16 @@ def show_search_interface():
                 )
                 st.rerun()
 
-    # --- Секция для отображения ИНТЕРАКТИВНОГО предпросмотра --- 
+
+    # --- Секция для отображения сгенерированных документов ---
+    display_generated_documents_section(
+        st.session_state.get('generated_documents', {}),
+        selected_details,
+        selected_search_data,
+        CERTIFICATE_API_URL_TO_USE
+    )
+
+        # --- Секция для отображения ИНТЕРАКТИВНОГО предпросмотра --- 
     if st.session_state.get('preview_jsons'):
         st.subheader("Интерактивный предпросмотр документов:")
         for doc_id, preview_data in st.session_state.preview_jsons.items():
@@ -255,12 +270,6 @@ def show_search_interface():
 
                 st.markdown(rendered_template_html, unsafe_allow_html=True)
 
-    # --- Секция для отображения сгенерированных документов ---
-    display_generated_documents_section(
-        st.session_state.get('generated_documents', {}),
-        selected_details,
-        selected_search_data
-    )
 
 if __name__ == "__main__":
     main()

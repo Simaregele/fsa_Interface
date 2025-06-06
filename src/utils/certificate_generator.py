@@ -253,21 +253,22 @@ def get_document_preview_json(details: Dict[str, Any], base_api_url: str, search
 def generate_documents(details: Dict[str, Any], base_api_url: str, search_data: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bytes, str]]:
     try:
         payload, merged_data = _prepare_request_data(details, search_data)
-        # Отправка запроса
-        generate_url = f"{base_api_url}/generate_documents"
+        
+        # <<< ЗДЕСЬ ОТПРАВЛЯЕТСЯ ЗАПРОС НА ГЕНЕРАЦИЮ ДОКУМЕНТОВ И ОЖИДАЕТСЯ ОТВЕТ >>>
         response = requests.post(
-            generate_url,
+            f"{base_api_url}/generate_documents",
             json=payload,
             headers={'Content-Type': 'application/json; charset=utf-8'}
         )
         response.raise_for_status()
-        documents_list = response.json()
+
+        response_data = response.json()
         result = {
-            'documents': documents_list,
+            'documents': response_data,
             'merged_data': merged_data
         }
         logging.info("Документы успешно сгенерированы для данных: %s (URL: %s)",
-                    merged_data.get('ID', '') or merged_data.get('search_ID', 'Unknown ID'), generate_url)
+                    merged_data.get('ID', '') or merged_data.get('search_ID', 'Unknown ID'), f"{base_api_url}/generate_documents")
         return result
     except requests.RequestException as e:
         error_url_info = f"{base_api_url}/generate_documents"

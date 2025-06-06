@@ -37,9 +37,9 @@ def get_document_content(download_url: str, doc_id: str, doc_type: str) -> bytes
         return file_response.content
     return None
 
-def display_document_download_button(doc, doc_id):
+def display_document_download_button(doc, doc_id, base_api_url: str):
     """Отображает кнопку скачивания для документа"""
-    download_url = f"{config['CERTIFICATE_API_URL']}{doc['url']}"
+    download_url = f"{base_api_url}{doc['url']}"
     
     mime_types = {
         'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
