@@ -278,3 +278,75 @@ def generate_documents(details: Dict[str, Any], base_api_url: str, search_data: 
             logging.error("Содержимое ответа: %s", e.response.text)
         return {}
 
+
+def generate_documents_from_preview(preview_data: Dict[str, Any], base_api_url: str, doc_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Отправляет данные из предпросмотра для генерации документов на стандартный эндпоинт.
+
+    Args:
+        preview_data (Dict[str, Any]): Словарь с 'processed_data' и 'template_text'.
+        base_api_url (str): Базовый URL API.
+        doc_id (str): ID документа для логирования.
+
+    Returns:
+        Optional[Dict[str, Any]]: Ответ от API или None в случае ошибки.
+    """
+    try:
+        processed_data_str = stringify_values(preview_data.get('processed_data', {}))
+        
+        payload = {
+            "processed_data": processed_data_str,
+            "template_text": preview_data.get('template_text', '')
+        }
+        
+        # Используем стандартный эндпоинт, как вы и предложили
+        generation_url = f"{base_api_url}/generate_documents"
+        response = requests.post(
+            generation_url,
+            json=payload,
+            headers={'Content-Type': 'application/json; charset=utf-8'}
+        )
+        response.raise_for_status()
+
+        response_data = response.json()
+        logging.info("Документы успешно сгенерированы из предпросмотра для ID: %s (URL: %s)", doc_id, generation_url)
+        return response_data
+
+    except requests.RequestException as e:
+        error_url_info = f"{base_api_url}/generate_documents"
+        logging.error("Ошибка при генерации из предпросмотра для ID %s (URL: %s): %s", doc_id, error_url_info, str(e))
+        if hasattr(e, 'response') and e.response is not None:
+            logging.error("Статус код: %s", e.response.status_code)
+            logging.error("Содержимое ответа: %s", e.response.text)
+        return None
+    except json.JSONDecodeError as e:
+        error_url_info = f"{base_api_url}/generate_documents"
+        logging.error("Ошибка декодирования JSON при генерации из предпросмотра для ID %s (URL: %s): %s", doc_id, error_url_info, str(e))
+        if 'response' in locals() and response is not None:
+            logging.error("Содержимое ответа, вызвавшее ошибку: %s", response.text)
+        return None
+
+
+def generate_documents_from_processed(processed_data: Dict[str, Any], base_api_url: str, doc_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Отправляет уже готовые строковые processed_data на стандартный /generate_documents.
+    Args:
+        processed_data: словарь строк после редактирования пользователем.
+        base_api_url: базовый URL.
+        doc_id: идентификатор документа для логов.
+    Returns: ответ JSON или None.
+    """
+    try:
+        payload = {"data": stringify_values(processed_data)}
+        url = f"{base_api_url}/generate_documents"
+        response = requests.post(url, json=payload, headers={'Content-Type': 'application/json; charset=utf-8'})
+        response.raise_for_status()
+        logging.info("Документы с processed_data успешно сгенерированы для %s", doc_id)
+        return response.json()
+    except requests.RequestException as e:
+        logging.error("Ошибка при генерации processed_data для %s: %s", doc_id, str(e))
+        if hasattr(e, 'response') and e.response is not None:
+            logging.error("Статус код: %s", e.response.status_code)
+            logging.error("Содержимое ответа: %s", e.response.text)
+        return None
+

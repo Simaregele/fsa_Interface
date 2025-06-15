@@ -10,7 +10,7 @@ from src.ui.ui_components import display_search_form, display_results_table
 from config.config import load_config
 from src.utils.document_download import clear_document_cache
 from src.utils.document_display import display_generated_documents_section
-from src.utils.document_generator import generate_documents_for_selected, preview_documents_for_selected
+from src.utils.document_generator import generate_documents_for_selected, preview_documents_for_selected, generate_documents_from_preview_data
 
 # Загружаем конфигурацию
 config = load_config()
@@ -270,6 +270,48 @@ def show_search_interface():
 
                 st.markdown(rendered_template_html, unsafe_allow_html=True)
 
+        # --- Кнопка генерации документов из данных предпросмотра ---
+        if st.button("Сгенерировать документы из предпросмотра", key="generate_from_preview", use_container_width=True):
+            all_preview_data_for_generation = {}
+            for doc_id, preview_content in st.session_state.preview_jsons.items():
+                current_data = {}
+                processed_data_for_doc = preview_content.get('processed_data', {})
+
+                # Основные поля
+                for field_key, original_val in processed_data_for_doc.items():
+                    if field_key == 'filials':
+                        continue
+                    session_key = f"preview_input_{doc_id}_{field_key}"
+                    user_val = st.session_state.get(session_key, '')
+                    current_data[field_key] = user_val if user_val != "" else original_val
+
+                # Филиалы
+                filials_list = []
+                original_filials = processed_data_for_doc.get('filials', [])
+                if isinstance(original_filials, list):
+                    for idx, filial in enumerate(original_filials):
+                        name_key = f"preview_input_{doc_id}_filial_{idx}_name"
+                        addr_key = f"preview_input_{doc_id}_filial_{idx}_address"
+                        name_val = st.session_state.get(name_key, '') or filial.get('name', '')
+                        addr_val = st.session_state.get(addr_key, '') or filial.get('address', '')
+                        filials_list.append({"name": name_val, "address": addr_val})
+                current_data['filials'] = filials_list
+
+                all_preview_data_for_generation[doc_id] = {
+                    'processed_data': current_data,
+                    'template_text': preview_content.get('template_text', '')
+                }
+
+            if not all_preview_data_for_generation:
+                st.warning("Нет данных для генерации. Выполните предпросмотр.")
+            else:
+                clear_generated_documents()
+                generate_documents_from_preview_data(
+                    all_preview_data_for_generation,
+                    CERTIFICATE_API_URL_TO_USE
+                )
+                st.success("Документы успешно сгенерированы из данных предпросмотра!")
+                st.rerun()
 
 if __name__ == "__main__":
     main()

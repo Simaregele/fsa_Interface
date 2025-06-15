@@ -6,6 +6,7 @@ from config.config import load_config
 from src.auth.auth import authenticator
 from src.api.document_updater import DocumentUpdateRequest
 from typing import Dict, Any, Optional, Union
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,10 @@ def search_one_fsa(params):
         return None
 
 def get_document_details(doc_id, doc_type):
+    # Инициализируем кэш, если ещё не создан
+    if 'registry_details_cache' not in st.session_state:
+        st.session_state.registry_details_cache = {}
+
     url = config.get_service_url('registry', 'document_by_id', doc_type=doc_type, doc_id=doc_id)
 
     headers = {}
@@ -76,7 +81,13 @@ def get_document_details(doc_id, doc_type):
                 return None
             
             response_data['docType'] = doc_type
-            return response_data
+
+            # Сохраняем в кэш для текущей сессии
+            cache_key = f"{doc_type}_{doc_id}"
+            st.session_state.registry_details_cache[cache_key] = response_data
+            logger.info("Добавлены данные в кэш registry_details_cache для %s", cache_key)
+
+            return copy.deepcopy(response_data)
         except requests.exceptions.JSONDecodeError as e:
             logger.error(f"Ошибка декодирования JSON для doc_id {doc_id}, doc_type {doc_type}: {e}")
             logger.error(f"Содержимое ответа: {response.text}")
