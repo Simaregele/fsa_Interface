@@ -1,8 +1,9 @@
 import requests
 import json
-from typing import Dict, Any, Union, Optional
+from typing import Dict, Any, Union, Optional, Tuple
 import logging
 from config.config import load_config
+from src.api.client import FSAApiClient  # локальный импорт, чтобы избежать циклов
 
 
 config = load_config()
@@ -33,6 +34,7 @@ def utf8_encode_dict(data: Dict[str, Any]) -> Dict[str, Any]:
 
 def get_nested_value(data: Dict[str, Any], path: str, default: Any = '') -> Any:
     keys = path.split('.')
+    print('keys', keys)
     value = data
     for key in keys:
         if key.endswith(']'):
@@ -171,19 +173,22 @@ def process_dates_and_personnel(data: Dict[str, Any]) -> Dict[str, str]:
     return result
 
 
+def build_payload(details: Dict[str, Any], search_data: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Строит JSON-payload для сервиса генерации документов и возвращает его вместе с объединёнными данными."""
+    if search_data is not None:
+        merged_data = FSAApiClient.merge_search_and_details(search_data, details)  # type: ignore[arg-type]
+    else:
+        merged_data = details.copy()
+
+    utf8_data = utf8_encode_dict(merged_data)
+    payload = {"data": utf8_data}
+    return payload, merged_data
+
+
 def generate_documents(details: Dict[str, Any], search_data: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bytes, str]]:
     try:
-        # Подготовка данных не меняется
-        merged_data = details.copy()
-        if search_data:
-            for key, value in search_data.items():
-                if key not in merged_data:
-                    merged_data[f'search_{key}'] = value
-                    if key == 'TNVED':
-                        merged_data['tnved_codes'] = value
-
-        utf8_data = utf8_encode_dict(merged_data)
-        payload = {"data": utf8_data}
+        # Формируем payload в отдельной функции
+        payload, merged_data = build_payload(details, search_data)
 
         # Отправка запроса
         generate_url = f"{config['CERTIFICATE_API_URL']}/generate_documents"

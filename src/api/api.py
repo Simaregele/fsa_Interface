@@ -6,79 +6,25 @@ from config.config import load_config
 from src.auth.auth import authenticator
 from src.api.document_updater import DocumentUpdateRequest
 from typing import Dict, Any, Optional, Union
+from src.api.client import FSAApiClient  # NEW IMPORT
 
 logger = logging.getLogger(__name__)
 
 config = load_config()
 
-def search_fsa(params, page=0, page_size=20):
-    url = config.get_service_url('registry', 'search')
-    params['page'] = page
-    params['pageSize'] = page_size
-
-    # Добавляем поддержку поиска по филиалам
-    if 'branchCountry' in params and params['branchCountry']:
-        params['branchCountry'] = params['branchCountry']
-
-    headers = {}
-    token = authenticator.get_token()
-    if token:
-        headers['Authorization'] = f'Bearer {token}'
-
-    response = requests.get(url, params=params, headers=headers)
-    if response.status_code == 200:
-        result = response.json()
-        return result
-    elif response.status_code == 401:
-        st.error("Ошибка аутентификации. Пожалуйста, войдите в систему снова.")
-        st.session_state["authentication_status"] = False
-        st.rerun()
-    else:
-        st.error(f"Ошибка при запросе: {response.status_code}")
-        return None
+def search_fsa(params):
+    """Проксирует вызов к синглтону FSAApiClient для обратной совместимости."""
+    client = FSAApiClient.get_instance()
+    return client.search(params)
 
 
 def search_one_fsa(params):
-    url = config.get_service_url('registry', 'search_one')
-
-    headers = {}
-    token = authenticator.get_token()
-    if token:
-        headers['Authorization'] = f'Bearer {token}'
-
-    response = requests.get(url, params=params, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    elif response.status_code == 401:
-        st.error("Ошибка аутентификации. Пожалуйста, войдите в систему снова.")
-        st.session_state["authentication_status"] = False
-        st.rerun()
-    else:
-        st.error(f"Ошибка при запросе: {response.status_code}")
-        return None
+    client = FSAApiClient.get_instance()
+    return client.search_one(params)
 
 def get_document_details(doc_id, doc_type):
-    url = config.get_service_url('registry', 'document_by_id', doc_type=doc_type, doc_id=doc_id)
-
-    headers = {}
-    token = authenticator.get_token()
-    if token:
-        headers['Authorization'] = f'Bearer {token}'
-
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        # Получаем JSON из ответа
-        response_data = response.json()
-        # Добавляем поле docType
-        response_data['docType'] = doc_type
-        return response_data
-    elif response.status_code == 401:
-        st.error("Ошибка аутентификации. Пожалуйста, войдите в систему снова.")
-        st.session_state["authentication_status"] = False
-        st.rerun()
-    else:
-        st.error(f"Ошибка при запросе детальной информации: {response.status_code}")
-        return None
+    client = FSAApiClient.get_instance()
+    return client.get_document_details(doc_id, doc_type)
 
 def sync_document(doc_id, doc_type):
     url = config.get_service_url('document', 'sync_document', doc_type=doc_type, doc_id=doc_id)

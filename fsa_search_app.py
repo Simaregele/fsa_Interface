@@ -2,14 +2,15 @@ from src.config.page_config import init_page_config
 init_page_config()  # Должна быть первой строкой после импортов
 
 import streamlit as st
-from src.api.api import search_fsa, get_document_details, search_one_fsa
+from src.api.api import get_document_details
 from src.auth.auth import authenticator
 from src.ui.ui_components import display_search_form, display_results_table
 from config.config import load_config
 from src.utils.document_download import clear_document_cache
-from src.utils.document_display import display_generated_documents_section
+from src.utils.document_display import display_generated_documents_section, display_certificate_preview_templates
 from src.utils.document_generator import generate_documents_for_selected
-
+from src.api.client import FSAApiClient
+from src.generate_preview import preview_editor
 # Загружаем конфигурацию
 config = load_config()
 
@@ -56,7 +57,9 @@ def show_search_interface():
         st.session_state.current_page = 0
 
     if st.session_state.search_params:
-        results = search_fsa(st.session_state.search_params, st.session_state.current_page)
+        client = FSAApiClient.get_instance()
+        # !!!! Вот тут у нас 
+        results = client.search(st.session_state.search_params, st.session_state.current_page)
 
         if results is not None:
             if isinstance(results, dict):
@@ -103,6 +106,10 @@ def show_search_interface():
                             with st.expander("Детальные данные"):
                                 st.json(details)
 
+                            preview_editor(selected_details, selected_search_data)
+
+                            display_certificate_preview_templates(selected_details, selected_search_data)
+
                     if st.button("Сгенерировать файлы для выбранных документов"):
                         clear_generated_documents()
                         generate_documents_for_selected(selected_details, selected_search_data)
@@ -114,6 +121,9 @@ def show_search_interface():
                         selected_details,
                         selected_search_data
                     )
+
+                    # Показываем предпросмотр сертификатов для сгенерированных документов
+                    
 
         else:
             st.error("Произошла ошибка при выполнении поиска. Пожалуйста, попробуйте еще раз.")

@@ -1,5 +1,8 @@
 import streamlit as st
 from src.utils.document_download import display_document_download_button
+from src.generate_preview.preview_templates import CERTIFICATE_PREVIEW_TEMPLATE
+from src.generate_preview.preview_templates import render_certificate_preview
+from src.utils.certificate_generator import build_payload  # NEW IMPORT
 
 def display_generated_documents_section(generated_documents, selected_details, selected_search_data):
     """
@@ -18,4 +21,31 @@ def display_generated_documents_section(generated_documents, selected_details, s
             for col, doc in zip(cols, documents['documents']):
                 with col:
                     display_document_download_button(doc, doc_id)
+
+# ---------------------------------------------------------------------------
+# Предпросмотр сертификата на основании merged_data
+# ---------------------------------------------------------------------------
+
+def display_certificate_preview_templates(selected_details: dict, selected_search_data: dict) -> None:
+    """Отображает HTML-предпросмотр для каждого выбранного документа до генерации.
+
+    Args:
+        selected_details: детали документов из `get_document_details`,
+            формат {doc_id: details_json}
+        selected_search_data: данные из поиска, формат {doc_id: search_json}
+    """
+
+    if not selected_details:
+        return
+
+    for doc_id, details in selected_details.items():
+        search_json = selected_search_data.get(doc_id, {})
+
+        # Используем build_payload, чтобы получить правильный merged_data точно так же,
+        # как перед отправкой в генератор документов.
+        _payload, merged_data = build_payload(details, search_json)  # noqa: W0612
+
+        preview_text = render_certificate_preview(merged_data)
+        st.subheader(f"Предпросмотр сертификата {doc_id}")
+        st.markdown(preview_text.replace("\n", "<br>"), unsafe_allow_html=True)
 
