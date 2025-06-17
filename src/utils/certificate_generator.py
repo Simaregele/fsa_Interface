@@ -3,7 +3,7 @@ import json
 from typing import Dict, Any, Union, Optional, Tuple
 import logging
 from config.config import load_config
-
+from src.utils.utils import get_nested_value, stringify_values
 
 config = load_config()
 
@@ -11,57 +11,11 @@ config = load_config()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def utf8_encode_dict(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Рекурсивно кодирует все строковые значения в словаре в UTF-8."""
-    result = {}
-    for key, value in data.items():
-        if isinstance(value, str):
-            result[key] = value.encode('utf-8').decode('utf-8')
-        elif isinstance(value, dict):
-            result[key] = utf8_encode_dict(value)
-        elif isinstance(value, list):
-            result[key] = [
-                utf8_encode_dict(item) if isinstance(item, dict)
-                else item.encode('utf-8').decode('utf-8') if isinstance(item, str)
-                else item
-                for item in value
-            ]
-        else:
-            result[key] = value
-    return result
-
-
-def get_nested_value(data: Dict[str, Any], path: str, default: Any = '') -> Any:
-    keys = path.split('.')
-    value = data
-    for key in keys:
-        if key.endswith(']'):
-            key, index = key[:-1].split('[')
-            try:
-                value = value.get(key, [])[int(index)]
-            except (IndexError, TypeError):
-                return default
-        else:
-            value = value.get(key, {})
-        if value == {}:
-            return default
-    return value if value != {} else default
 
 
 def filter_contacts(contacts: list, id_type: int) -> str:
     filtered = [c['value'] for c in contacts if c.get('idContactType') == id_type]
     return filtered[0] if filtered else ''
-
-
-def stringify_values(obj):
-    if isinstance(obj, dict):
-        return {k: stringify_values(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [stringify_values(i) for i in obj]
-    elif obj is None:
-        return ''
-    else:
-        return str(obj)
 
 
 def process_complex_json(data: Dict[str, Any]) -> Dict[str, str]:
@@ -184,25 +138,29 @@ def _prepare_request_data(details: Dict[str, Any], search_data: Optional[Dict[st
         `payload_for_request` содержит данные, закодированные в UTF-8 и обернутые в {"data": ...}.
         `merged_data_for_result` содержит объединенные данные до UTF-8 кодирования payload.
     """
+    # 1. Берём оригинальные details как базу (уже содержит docType и RegistryData)
     merged_data_for_result = details.copy()
-    if search_data:
-        for key, value in search_data.items():
-            # Если исходный ключ из search_data не существует в merged_data_for_result (которое изначально равно details)
-            if key not in merged_data_for_result:
-                merged_data_for_result[f'search_{key}'] = value
-                # И если этот отсутствующий ключ был 'TNVED'
-                if key == 'TNVED':
-                    merged_data_for_result['tnved_codes'] = value
-    
-    # Данные для payload должны быть UTF-8 закодированы
-    data_for_payload = utf8_encode_dict(merged_data_for_result)
-    payload_for_request = {"data": data_for_payload}
-    
+
+    # 2. Добавляем блок search_Product только с Tnveds
+    if search_data and isinstance(search_data, dict):
+        tnveds: list | None = None
+
+        # возможная вложенная структура
+        if isinstance(search_data.get('Product'), dict):
+            tnveds = search_data['Product'].get('Tnveds')
+        # возможный плоский ключ из UI
+        if tnveds is None:
+            tnveds = search_data.get('Product_Tnveds')
+
+        if tnveds is not None:
+            if not isinstance(tnveds, list):
+                tnveds = [str(tnveds)]
+            merged_data_for_result['search_Product'] = {"Tnveds": tnveds}
+
+    # 3. Формируем payload без дополнительного UTF-8 преобразования – requests сам кодирует JSON в utf-8
+    payload_for_request = {"data": merged_data_for_result}
+
     return payload_for_request, merged_data_for_result
-
-
-def document_preview(details: Dict[str, Any], search_data: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bytes, str]]:
-    pass
 
 
 def get_document_preview_json(details: Dict[str, Any], base_api_url: str, search_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -230,9 +188,16 @@ def get_document_preview_json(details: Dict[str, Any], base_api_url: str, search
         
         preview_json = response.json()
         
-        logging.info("JSON для предпросмотра успешно получен для данных: %s (URL: %s)",
-                     merged_data.get('ID', '') or merged_data.get('search_ID', 'Unknown ID'), preview_url)
-        
+        logging.info(
+            "JSON для предпросмотра успешно получен для данных: %s (URL: %s)",
+            merged_data.get('ID', '') or merged_data.get('search_ID', 'Unknown ID'),
+            preview_url,
+        )
+
+        # Красивый вывод структуры ответа сервера
+        logging.info("Структура ответа сервера (preview):\n%s",
+                     json.dumps(preview_json, ensure_ascii=False, indent=2))
+
         return preview_json
 
     except requests.RequestException as e:
@@ -252,6 +217,7 @@ def get_document_preview_json(details: Dict[str, Any], base_api_url: str, search
 
 def generate_documents(details: Dict[str, Any], base_api_url: str, search_data: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bytes, str]]:
     try:
+
         payload, merged_data = _prepare_request_data(details, search_data)
         
         # <<< ЗДЕСЬ ОТПРАВЛЯЕТСЯ ЗАПРОС НА ГЕНЕРАЦИЮ ДОКУМЕНТОВ И ОЖИДАЕТСЯ ОТВЕТ >>>
@@ -267,8 +233,6 @@ def generate_documents(details: Dict[str, Any], base_api_url: str, search_data: 
             'documents': response_data,
             'merged_data': merged_data
         }
-        logging.info("Документы успешно сгенерированы для данных: %s (URL: %s)",
-                    merged_data.get('ID', '') or merged_data.get('search_ID', 'Unknown ID'), f"{base_api_url}/generate_documents")
         return result
     except requests.RequestException as e:
         error_url_info = f"{base_api_url}/generate_documents"
@@ -278,75 +242,4 @@ def generate_documents(details: Dict[str, Any], base_api_url: str, search_data: 
             logging.error("Содержимое ответа: %s", e.response.text)
         return {}
 
-
-def generate_documents_from_preview(preview_data: Dict[str, Any], base_api_url: str, doc_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Отправляет данные из предпросмотра для генерации документов на стандартный эндпоинт.
-
-    Args:
-        preview_data (Dict[str, Any]): Словарь с 'processed_data' и 'template_text'.
-        base_api_url (str): Базовый URL API.
-        doc_id (str): ID документа для логирования.
-
-    Returns:
-        Optional[Dict[str, Any]]: Ответ от API или None в случае ошибки.
-    """
-    try:
-        processed_data_str = stringify_values(preview_data.get('processed_data', {}))
-        
-        payload = {
-            "processed_data": processed_data_str,
-            "template_text": preview_data.get('template_text', '')
-        }
-        
-        # Используем стандартный эндпоинт, как вы и предложили
-        generation_url = f"{base_api_url}/generate_documents"
-        response = requests.post(
-            generation_url,
-            json=payload,
-            headers={'Content-Type': 'application/json; charset=utf-8'}
-        )
-        response.raise_for_status()
-
-        response_data = response.json()
-        logging.info("Документы успешно сгенерированы из предпросмотра для ID: %s (URL: %s)", doc_id, generation_url)
-        return response_data
-
-    except requests.RequestException as e:
-        error_url_info = f"{base_api_url}/generate_documents"
-        logging.error("Ошибка при генерации из предпросмотра для ID %s (URL: %s): %s", doc_id, error_url_info, str(e))
-        if hasattr(e, 'response') and e.response is not None:
-            logging.error("Статус код: %s", e.response.status_code)
-            logging.error("Содержимое ответа: %s", e.response.text)
-        return None
-    except json.JSONDecodeError as e:
-        error_url_info = f"{base_api_url}/generate_documents"
-        logging.error("Ошибка декодирования JSON при генерации из предпросмотра для ID %s (URL: %s): %s", doc_id, error_url_info, str(e))
-        if 'response' in locals() and response is not None:
-            logging.error("Содержимое ответа, вызвавшее ошибку: %s", response.text)
-        return None
-
-
-def generate_documents_from_processed(processed_data: Dict[str, Any], base_api_url: str, doc_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Отправляет уже готовые строковые processed_data на стандартный /generate_documents.
-    Args:
-        processed_data: словарь строк после редактирования пользователем.
-        base_api_url: базовый URL.
-        doc_id: идентификатор документа для логов.
-    Returns: ответ JSON или None.
-    """
-    try:
-        payload = {"data": stringify_values(processed_data)}
-        url = f"{base_api_url}/generate_documents"
-        response = requests.post(url, json=payload, headers={'Content-Type': 'application/json; charset=utf-8'})
-        response.raise_for_status()
-        logging.info("Документы с processed_data успешно сгенерированы для %s", doc_id)
-        return response.json()
-    except requests.RequestException as e:
-        logging.error("Ошибка при генерации processed_data для %s: %s", doc_id, str(e))
-        if hasattr(e, 'response') and e.response is not None:
-            logging.error("Статус код: %s", e.response.status_code)
-            logging.error("Содержимое ответа: %s", e.response.text)
-        return None
 

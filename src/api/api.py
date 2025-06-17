@@ -8,6 +8,9 @@ from src.api.document_updater import DocumentUpdateRequest
 from typing import Dict, Any, Optional, Union
 import copy
 
+# Singleton хранилище деталей
+from src.utils.document_store import DocumentStore
+
 logger = logging.getLogger(__name__)
 
 config = load_config()
@@ -82,12 +85,16 @@ def get_document_details(doc_id, doc_type):
             
             response_data['docType'] = doc_type
 
-            # Сохраняем в кэш для текущей сессии
+            # --- Используем DocumentStore как единый источник правды ---
+            store = DocumentStore()
+            store.set(doc_id, response_data)
+
+            # (Старый кэш оставляем для совместимости, но храним ту же ссылку)
             cache_key = f"{doc_type}_{doc_id}"
             st.session_state.registry_details_cache[cache_key] = response_data
-            logger.info("Добавлены данные в кэш registry_details_cache для %s", cache_key)
+            logger.info("DocumentStore: сохранены детали для %s", doc_id)
 
-            return copy.deepcopy(response_data)
+            return response_data  # возвращаем ту же ссылку
         except requests.exceptions.JSONDecodeError as e:
             logger.error(f"Ошибка декодирования JSON для doc_id {doc_id}, doc_type {doc_type}: {e}")
             logger.error(f"Содержимое ответа: {response.text}")

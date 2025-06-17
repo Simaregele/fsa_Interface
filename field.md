@@ -184,3 +184,18 @@
 
 Если нужно — могу расписать пример JSON для каждого типа отдельно!  
 Если есть вопросы по какому-то конкретному полю — уточни, расскажу подробнее.
+
+
+Что важно
+
+build_preview_processed 
+
+
+
+Здесь:
+processed_data_for_doc берётся из preview_jsons, сформированных функцией
+preview_documents_for_selected() в src/utils/document_generator.py.
+Именно она вызывает build_preview_processed() → сериализует данные в processed_data и кладёт их в preview_jsons.
+Цикл по field_keys создаёт колонки st.columns() и для каждого поля рисует st.text_input().
+Ключ session_state_key = f"preview_input_{doc_id}_{field_key}" запоминает введённое значение в st.session_state, что и делает поле «редактируемым».
+Для филиалов (filials) выводится отдельный блок:

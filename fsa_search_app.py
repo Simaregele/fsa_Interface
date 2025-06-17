@@ -11,6 +11,7 @@ from config.config import load_config
 from src.utils.document_download import clear_document_cache
 from src.utils.document_display import display_generated_documents_section
 from src.utils.document_generator import generate_documents_for_selected, preview_documents_for_selected, generate_documents_from_preview_data
+from src.utils.document_store import DocumentStore
 
 # Загружаем конфигурацию
 config = load_config()
@@ -149,6 +150,10 @@ def show_search_interface():
                 st.json(item)
             with st.expander("Детальные данные"):
                 st.json(details)
+
+            # Сохраняем в DocumentStore
+            DocumentStore().set_search(item["ID"], item)
+
     st.session_state.selected_details = selected_details
     st.session_state.selected_search_data = selected_search_data
 
@@ -236,38 +241,7 @@ def show_search_interface():
                 # Для таблицы филиалов будем брать значения из session_state ниже.
 
                 st.markdown("---_Шаблон документа (обновляется автоматически):_---")
-                template_as_string = preview_data['template_text']
-                base_template_html = template_as_string.replace("\\n", "<br>").replace("\n", "<br>")
-                rendered_template_html = base_template_html
-
-                # Подстановка основных значений
-                for p_key, p_value_original in current_template_values.items():
-                    safe_value = html.escape(str(p_value_original) if p_value_original is not None else "")
-                    value_with_br = safe_value.replace("\\n", "<br>").replace("\n", "<br>")
-                    pattern = rf"{{{{\s*{re.escape(p_key)}\s*}}}}"
-                    rendered_template_html = re.sub(pattern, value_with_br, rendered_template_html)
-                
-                # Генерация и подстановка HTML таблицы для филиалов (теперь из st.session_state)
-                table_html = ""
-                if isinstance(filials_data_original, list) and filials_data_original: # Используем filials_data_original для определения количества филиалов
-                    table_html = "<table border=\"1\" style=\"border-collapse: collapse; width: 100%;\">"
-                    table_html += "<thead><tr><th style=\"text-align: left; padding: 5px;\">Описание</th><th style=\"text-align: left; padding: 5px;\">Адрес</th></tr></thead>"
-                    table_html += "<tbody>"
-                    for index, _ in enumerate(filials_data_original): # Итерируемся по индексам
-                        name_val = st.session_state.get(f"preview_input_{doc_id}_filial_{index}_name", "")
-                        address_val = st.session_state.get(f"preview_input_{doc_id}_filial_{index}_address", "")
-                        
-                        name_escaped = html.escape(name_val)
-                        address_escaped = html.escape(address_val)
-
-                        name_html = name_escaped.replace("\n", "<br>").replace("\\n", "<br>")
-                        address_html = address_escaped.replace("\n", "<br>").replace("\\n", "<br>")
-                        table_html += f"<tr><td style=\"padding: 5px; vertical-align: top;\">{name_html}</td><td style=\"padding: 5px; vertical-align: top;\">{address_html}</td></tr>"
-                    table_html += "</tbody></table>"
-                
-                table_placeholder_pattern = rf"{{{{\s*TABLE_PLACEHOLDER\s*}}}}"
-                rendered_template_html = re.sub(table_placeholder_pattern, table_html, rendered_template_html)
-
+                rendered_template_html = preview_data['template_text']
                 st.markdown(rendered_template_html, unsafe_allow_html=True)
 
         # --- Кнопка генерации документов из данных предпросмотра ---
