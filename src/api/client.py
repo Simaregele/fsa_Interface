@@ -28,6 +28,8 @@ class FSAApiClient:
         self._config = load_config()
         # здесь будем хранить последний ответ поиска
         self._last_search_response: Optional[Union[Dict[str, Any], list]] = None
+        # здесь будем хранить результат последнего объединения данных поиска и деталей
+        self._last_merged_data: Optional[Dict[str, Any]] = None
 
     # --------------------------- Singleton helpers ---------------------------
     @classmethod
@@ -70,14 +72,12 @@ class FSAApiClient:
     # Объединение данных для генератора документов
     # ------------------------------------------------------------------------
 
-    @staticmethod
-    def merge_search_and_details(search_json: Dict[str, Any], details_json: Dict[str, Any]) -> Dict[str, Any]:
-        """Возвращает объединённый словарь на основе search_json и details_json.
+    def merge_search_and_details(self, search_json: Dict[str, Any], details_json: Dict[str, Any]) -> Dict[str, Any]:
+        """Объединяет данные поиска и деталей, сохраняет результат в объекте и возвращает его.
 
-        Алгоритм идентичен использовавшемуся ранее в build_payload:
-        1. Клонируем details_json.
-        2. Для каждого поля из search_json, отсутствующего в details_json, добавляем вариант с префиксом
-           ``search_`` (чтобы избежать конфликтов с именами из деталей).
+        1. Клонируем ``details_json``.
+        2. Для каждого поля из ``search_json``, отсутствующего в ``details_json``,
+           добавляем вариант с префиксом ``search_`` (чтобы избежать конфликтов имён).
         3. Специально обрабатываем ключ ``TNVED`` — сохраняем также как ``tnved_codes``.
         """
 
@@ -88,6 +88,9 @@ class FSAApiClient:
                 merged[f"search_{key}"] = value
                 if key == "TNVED":
                     merged["tnved_codes"] = value
+
+        # кэшируем результат, чтобы переиспользовать без повторного объединения
+        self._last_merged_data = merged
 
         return merged
 
@@ -122,4 +125,81 @@ class FSAApiClient:
 
     # Доступ к последнему сохранённому результату поиска
     def get_last_search_response(self) -> Optional[Union[Dict[str, Any], list]]:
-        return self._last_search_response 
+        return self._last_search_response
+
+    # Доступ к последнему результату объединения
+    def get_last_merged_data(self) -> Optional[Dict[str, Any]]:
+        """Возвращает кэшированный результат последнего объединения данных."""
+        return self._last_merged_data
+
+    # ---------------------------------------------------------------------
+    # Работа с кэшированными merged_data
+    # ---------------------------------------------------------------------
+
+    def update_merged_data(self, path: str, value: Any) -> None:  # noqa: D401
+        """Обновляет *cached* merged_data по указанному *path*.
+
+        Пример ``path``: ``"RegistryData.applicant.fullName"`` или
+        ``"RegistryData.product.identifications[0].idTnveds"``.
+
+        Если кэш отсутствует – выводится предупреждение, изменение игнорируется.
+        Метод не использует *try/except* – при ошибке структуры данных
+        просто прекращает работу, оставляя кэш неизменным.
+        """
+
+        if self._last_merged_data is None:
+            logger.warning("Кэш merged_data отсутствует – обновление пропущено")
+            return
+
+        parts = path.split(".")
+        logger.debug("Попытка обновить merged_data по пути %s значением %s", path, value)
+        current: Any = self._last_merged_data
+
+        # Проходим все компоненты пути, кроме последнего ключа
+        for idx, part in enumerate(parts):
+            is_last = idx == len(parts) - 1
+
+            # Обработка нотации key[index]
+            if part.endswith("]") and "[" in part:
+                key, index_str = part[:-1].split("[")
+                index = int(index_str) if index_str.isdigit() else None
+
+                # Проверка существования ключа
+                match current:
+                    case dict() as d if key in d:
+                        # Удостоверяемся, что под ключом – список
+                        if isinstance(d[key], list) and index is not None and index < len(d[key]):
+                            if is_last:
+                                logger.debug("Обновляем список: %s[%s]", key, index)
+                                d[key][index] = value
+                            else:
+                                current = d[key][index]
+                            continue
+                    case _:
+                        logger.warning("Путь '%s' недоступен в merged_data", path)
+                        return
+            else:
+                # Обработка, когда ключ представляет собой число (идентификатор документа)
+                match current:
+                    case dict() as d if part.isdigit() and int(part) in d:
+                        key_int = int(part)
+                        if is_last:
+                            logger.debug("Обновляем числовой ключ %s", key_int)
+                            d[key_int] = value
+                        else:
+                            current = d[key_int]
+                        continue
+                # Обычный строковый ключ
+                match current:
+                    case dict() as d if part in d:
+                        if is_last:
+                            logger.debug("Обновляем ключ '%s'", part)
+                            d[part] = value
+                        else:
+                            current = d[part]
+                        continue
+                    case _:
+                        logger.warning("Путь '%s' недоступен в merged_data", path)
+                        return
+
+        logger.info("Поле '%s' успешно обновлено в merged_data", path) 

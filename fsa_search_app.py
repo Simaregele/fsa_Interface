@@ -10,7 +10,7 @@ from src.utils.document_download import clear_document_cache
 from src.utils.document_display import display_generated_documents_section, display_certificate_preview_templates
 from src.utils.document_generator import generate_documents_for_selected
 from src.api.client import FSAApiClient
-from src.generate_preview import preview_editor
+from src.ui.ui_components import display_editable_merged_data
 # Загружаем конфигурацию
 config = load_config()
 
@@ -105,8 +105,12 @@ def show_search_interface():
 
                             with st.expander("Детальные данные"):
                                 st.json(details)
-
-                            preview_editor(selected_details, selected_search_data)
+                            
+                            # Объединяем данные для текущего документа,
+                            # но только если кэша ещё нет (чтобы не перезаписывать правки)
+                            if client.get_last_merged_data() is None:
+                                client.merge_search_and_details(item, details)
+                            display_editable_merged_data()
 
                             display_certificate_preview_templates(selected_details, selected_search_data)
 

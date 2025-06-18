@@ -1,8 +1,13 @@
+import logging
 import streamlit as st
 from src.utils.document_download import display_document_download_button
 from src.generate_preview.preview_templates import CERTIFICATE_PREVIEW_TEMPLATE
 from src.generate_preview.preview_templates import render_certificate_preview
 from src.utils.certificate_generator import build_payload  # NEW IMPORT
+from src.api.client import FSAApiClient
+
+# Логгер модуля
+logger = logging.getLogger(__name__)
 
 def display_generated_documents_section(generated_documents, selected_details, selected_search_data):
     """
@@ -17,9 +22,11 @@ def display_generated_documents_section(generated_documents, selected_details, s
     if generated_documents:
         for doc_id, documents in generated_documents.items():
             st.write(f"Документы для заявки {doc_id}:")
+            logger.info("Документы для заявки %s: %s", doc_id, documents)
             cols = st.columns(len(documents['documents']))
             for col, doc in zip(cols, documents['documents']):
                 with col:
+                    logger.debug("Документ: %s", doc)
                     display_document_download_button(doc, doc_id)
 
 # ---------------------------------------------------------------------------
@@ -43,7 +50,9 @@ def display_certificate_preview_templates(selected_details: dict, selected_searc
 
         # Используем build_payload, чтобы получить правильный merged_data точно так же,
         # как перед отправкой в генератор документов.
-        _payload, merged_data = build_payload(details, search_json)  # noqa: W0612
+        client = FSAApiClient.get_instance()
+        merged_data  = client.get_last_merged_data()
+
 
         preview_text = render_certificate_preview(merged_data)
         st.subheader(f"Предпросмотр сертификата {doc_id}")

@@ -5,7 +5,10 @@ from src.utils.utils import format_date, flatten_dict, generate_fsa_url
 from src.api.api import update_document
 from src.manual_db_update.updater_handlers import process_table_changes
 from src.api.document_updater import DocumentUpdateRequest, Product, Manufacturer, Branch
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
+from src.api.client import FSAApiClient
+import pandas as pd
+import re as _re
 
 from src.ui.model import TableColumns
 
@@ -16,7 +19,41 @@ logger = logging.getLogger(__name__)
 _ORIGINAL_DF_KEY: str = "original_results_df"
 _EDITED_DF_KEY: str = "edited_results_df"
 
+_CERTIFICATE_USER_PATHS: list[str] = [
+    "RegistryData.applicant.fullName",
+    "RegistryData.applicant.addresses.0.fullAddress",
+    "RegistryData.applicant.ogrn",
+    "RegistryData.applicant.contacts.0.value",
+    "RegistryData.applicant.contacts.1.value",
+    "RegistryData.applicant.firstName",
+    "RegistryData.applicant.patronymic",
+    "RegistryData.applicant.surname",
+    "RegistryData.applicant.headPosition",
+    "RegistryData.applicant.firstName",
+    "RegistryData.applicant.patronymic",
+    "RegistryData.applicant.surname",
+    "RegistryData.product.fullName",
+    "RegistryData.product.identifications.0.name",
+    "RegistryData.manufacturer.fullName",
+    "RegistryData.manufacturer.addresses.0.fullAddress",
+    "search_Product.Tnveds",
+    "RegistryData.product.identifications.0.documents",
+    "RegistryData.testingLabs",
+    "RegistryData.declRegDate",
+    "RegistryData.declEndDate",
+    "RegistryData.product.identifications.0.documents.0.name",
+    "RegistryData.product.storageCondition",
+    "RegistryData.product.usageCondition",
+    "RegistryData.product.usageScope",
+    "RegistryNumber",
+    "RegistryData.manufacturerFilials",
+]
 
+# Преобразуем в формат flatten-пути (addresses[0] вместо addresses.0)
+def _to_flatten_path(p: str) -> str:
+    return _re.sub(r"\.(\d+)\.", lambda m: f"[{m.group(1)}].", p)
+
+_CERTIFICATE_ALLOWED_PATHS = {_to_flatten_path(p) for p in _CERTIFICATE_USER_PATHS}
 
 def display_search_form():
     st.subheader("Параметры поиска")
@@ -303,3 +340,95 @@ def display_document_details(details):
 
 def display_generate_certificates_button():
     return st.button("Сгенерировать сертификаты для выбранных документов")
+
+
+# ---------------------------------------------------------------------------
+# Редактируемый просмотр merged_data
+# ---------------------------------------------------------------------------
+
+
+def _flatten_with_paths(data: Any, parent: str = "") -> List[tuple[str, Any]]:
+    """Рекурсивно раскладывает словарь/список в пары (path, value).
+
+    Путь формируется в нотации ``key1.key2[0].key3``.
+    """
+    parts: List[tuple[str, Any]] = []
+
+    match data:
+        case dict():
+            for k, v in data.items():
+                new_parent = f"{parent}.{k}" if parent else k
+                parts.extend(_flatten_with_paths(v, new_parent))
+        case list():
+            for idx, item in enumerate(data):
+                new_parent = f"{parent}[{idx}]"
+                parts.extend(_flatten_with_paths(item, new_parent))
+        case _:
+            parts.append((parent, data))
+
+    return parts
+
+
+def display_editable_merged_data() -> None:
+    """Отображает кэшированный *merged_data* в виде редактируемой таблицы.
+
+    После нажатия кнопки «Сохранить» обновляет значения в кэше через
+    ``FSAApiClient.update_merged_data``.
+    """
+
+      # локальный импорт, чтобы избежать циклов
+
+    client = FSAApiClient.get_instance()
+    merged_data = client.get_last_merged_data()
+
+    if not merged_data:
+        st.info("Нет данных для отображения")
+        return
+
+    flat_items = _flatten_with_paths(merged_data)
+
+    # Определяем тип документа, допускаем вложенность на уровень ID
+    def _extract_doc_type(d: dict) -> str:
+        if "docType" in d:
+            return str(d["docType"])
+        # пробуем найти во вложенном словаре первого уровня
+        if len(d) == 1:
+            v = next(iter(d.values()))
+            if isinstance(v, dict) and "docType" in v:
+                return str(v["docType"])
+        return ""
+
+    doc_type_detected = _extract_doc_type(merged_data).lower()
+
+    if doc_type_detected == "certificate":
+        # оставляем только интересующие нас поля; учитываем возможный префикс ID
+        flat_items = [
+            item for item in flat_items
+            if item[0] in _CERTIFICATE_ALLOWED_PATHS or
+               any(item[0].endswith(f".{p}") or item[0].endswith(f".{p}") for p in _CERTIFICATE_ALLOWED_PATHS)
+        ]
+
+    df = pd.DataFrame(flat_items, columns=["Path", "Value"])
+
+    # Таблица редактируется только по колонке Value
+    edited_df = st.data_editor(
+        df,
+        column_config={
+            "Path": st.column_config.Column("Путь", disabled=True),
+            "Value": st.column_config.TextColumn("Значение"),
+        },
+        num_rows="fixed",
+        use_container_width=True,
+    )
+
+    if st.button("Сохранить изменения"):
+        for _, row in edited_df.iterrows():
+            original_value = df.loc[row.name, "Value"]
+            if str(row["Value"]) != str(original_value):
+                logger.info(
+                    "Изменение merged_data: path=%s, old=%s, new=%s",
+                    row["Path"], original_value, row["Value"],
+                )
+                client.update_merged_data(row["Path"], row["Value"])
+
+        st.success("Изменения сохранены")

@@ -8,6 +8,9 @@ from src.api.client import FSAApiClient  # локальный импорт, чт
 
 config = load_config()
 
+# Настройка логирования модуля
+logger = logging.getLogger(__name__)
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -173,12 +176,15 @@ def process_dates_and_personnel(data: Dict[str, Any]) -> Dict[str, str]:
     return result
 
 
-def build_payload(details: Dict[str, Any], search_data: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def build_payload() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Строит JSON-payload для сервиса генерации документов и возвращает его вместе с объединёнными данными."""
-    if search_data is not None:
-        merged_data = FSAApiClient.merge_search_and_details(search_data, details)  # type: ignore[arg-type]
-    else:
-        merged_data = details.copy()
+    client = FSAApiClient.get_instance()
+    cached = client.get_last_merged_data()
+    if cached is None:
+        raise ValueError("Нет данных merged_data в кэше. Сначала объедините данные, затем вызывайте генерацию.")
+
+    # Используем уже существующий (и, возможно, отредактированный) кэш
+    merged_data = cached  # type: ignore[arg-type]
 
     utf8_data = utf8_encode_dict(merged_data)
     payload = {"data": utf8_data}
@@ -188,23 +194,27 @@ def build_payload(details: Dict[str, Any], search_data: Optional[Dict[str, Any]]
 def generate_documents(details: Dict[str, Any], search_data: Optional[Dict[str, Any]] = None) -> Dict[str, Union[bytes, str]]:
     try:
         # Формируем payload в отдельной функции
-        payload, merged_data = build_payload(details, search_data)
+        payload, merged_data = build_payload()
 
-        # Отправка запроса
-        generate_url = f"{config['CERTIFICATE_API_URL']}/generate_documents"
+        generate_url = f"{config['LOCAL_CERTIFICATE_API_URL']}/generate_documents"
+
+        logger.info("Отправка запроса на генерацию документов: %s", generate_url)
+        logger.debug("Payload: %s", json.dumps(payload, ensure_ascii=False))
+
         response = requests.post(
             generate_url,
             json=payload,
             headers={'Content-Type': 'application/json; charset=utf-8'}
         )
+
+        logger.info("Ответ API генерации: %s", response.status_code)
         response.raise_for_status()
         
         # Получаем список документов в новом формате
         documents_list = response.json()  # Теперь это список словарей с type, format, name, url
         
         result = {
-            'documents': documents_list,  # Сохраняем весь список документов
-            'merged_data': merged_data    
+            'documents': documents_list  # список документов
         }
         
         logging.info("Документы успешно сгенерированы для данных: %s",
