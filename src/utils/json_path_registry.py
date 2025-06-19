@@ -26,15 +26,41 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 PATHS: dict[str, str] = {
-    # Примеры, удалите после заполнения
-    "applicant_fullname": "RegistryData.applicant.fullName",
-    "applicant_address": "RegistryData.applicant.addresses[0].fullAddress",
+    "certificate_number": "RegistryNumber",
+    "batch_number": "RegistryID",
     "certification_body_fullName": "RegistryData.certificationAuthority.fullName",
     "certification_body_address": "RegistryData.certificationAuthority.addresses[0].fullAddress",
-    "certification_body_phone": "RegistryData.certificationAuthority.phone",
-    "certification_body_email": "RegistryData.certificationAuthority.email",
-    "certification_body_website": "RegistryData.certificationAuthority.website",
-    "certification_body_logo": "RegistryData.certificationAuthority.logo",
+    "certification_body_attestatRegNumber": "RegistryData.certificationAuthority.attestatRegNumber",
+    "certification_body_attestatRegDate": "RegistryData.certificationAuthority.attestatRegDate",
+    "certification_body_phone": "RegistryData.certificationAuthority.contacts[1].value",
+    "certification_body_email": "RegistryData.certificationAuthority.contacts[0].value",
+    "applicant_fullname": "RegistryData.applicant.fullName",
+    "applicant_address": "RegistryData.applicant.addresses[0].fullAddress",
+    "applicant_ogrn": "RegistryData.applicant.ogrn",
+    "applicant_phone": "RegistryData.applicant.contacts[1].value",
+    "applicant_email": "RegistryData.applicant.contacts[0].value",
+    "manufacturer_fullname": "RegistryData.manufacturer.fullName",
+    "manufacturer_address": "RegistryData.manufacturer.addresses[0].fullAddress",
+    "product_description_name": "RegistryData.product.fullName",
+    "product_description_identification": "RegistryData.product.identifications[0].name",
+    "tn_ved_codes": "search_Product.Tnveds[n]",
+    "technical_regulation": "RegistryData.product.identifications[0].documents[0].name",
+    "test_reports_number": "RegistryData.testingLabs[n].protocols[0].number",
+    "test_reports_date": "RegistryData.testingLabs[n].protocols[0].date",
+    "test_reports_fullname": "RegistryData.testingLabs[n].fullName",
+    "standards_and_conditions_designation": "RegistryData.product.identifications[0].standards[n].designation",
+    "standards_and_conditions_name": "RegistryData.product.identifications[0].standards[n].name",
+    "standards_and_conditions_storageCondition": "RegistryData.product.storageCondition",
+    "standards_and_conditions_usageCondition": "RegistryData.product.usageCondition",
+    "standards_and_conditions_usageScope": "RegistryData.product.usageScope",
+    "issue_date": "RegistryData.certRegDate",
+    "expiry_date": "RegistryData.certEndDate",
+    "expert_name_surname": "RegistryData.experts[0].surname",
+    "expert_name_name": "RegistryData.experts[0].firstName",
+    "expert_name_patronymic": "RegistryData.experts[0].patronimyc",
+    "head_of_certification_body_surname": "RegistryData.certificationAuthority.surname",
+    "head_of_certification_body_first_name": "RegistryData.certificationAuthority.firstName",
+    "head_of_certification_body_patronymic": "RegistryData.certificationAuthority.patronymic"
 }
 
 # ---------------------------------------------------------------------------

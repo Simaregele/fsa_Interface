@@ -7,8 +7,10 @@ from src.manual_db_update.updater_handlers import process_table_changes
 from src.api.document_updater import DocumentUpdateRequest, Product, Manufacturer, Branch
 from typing import List, Dict, Any
 from src.api.client import FSAApiClient
+from src.utils.json_path_registry import PATHS
 import pandas as pd
 import re as _re
+import re
 
 from src.ui.model import TableColumns
 
@@ -19,41 +21,23 @@ logger = logging.getLogger(__name__)
 _ORIGINAL_DF_KEY: str = "original_results_df"
 _EDITED_DF_KEY: str = "edited_results_df"
 
-_CERTIFICATE_USER_PATHS: list[str] = [
-    "RegistryData.applicant.fullName",
-    "RegistryData.applicant.addresses.0.fullAddress",
-    "RegistryData.applicant.ogrn",
-    "RegistryData.applicant.contacts.0.value",
-    "RegistryData.applicant.contacts.1.value",
-    "RegistryData.applicant.firstName",
-    "RegistryData.applicant.patronymic",
-    "RegistryData.applicant.surname",
-    "RegistryData.applicant.headPosition",
-    "RegistryData.applicant.firstName",
-    "RegistryData.applicant.patronymic",
-    "RegistryData.applicant.surname",
-    "RegistryData.product.fullName",
-    "RegistryData.product.identifications.0.name",
-    "RegistryData.manufacturer.fullName",
-    "RegistryData.manufacturer.addresses.0.fullAddress",
-    "search_Product.Tnveds",
-    "RegistryData.product.identifications.0.documents",
-    "RegistryData.testingLabs",
-    "RegistryData.declRegDate",
-    "RegistryData.declEndDate",
-    "RegistryData.product.identifications.0.documents.0.name",
-    "RegistryData.product.storageCondition",
-    "RegistryData.product.usageCondition",
-    "RegistryData.product.usageScope",
-    "RegistryNumber",
-    "RegistryData.manufacturerFilials",
-]
-
 # Преобразуем в формат flatten-пути (addresses[0] вместо addresses.0)
 def _to_flatten_path(p: str) -> str:
     return _re.sub(r"\.(\d+)\.", lambda m: f"[{m.group(1)}].", p)
 
-_CERTIFICATE_ALLOWED_PATHS = {_to_flatten_path(p) for p in _CERTIFICATE_USER_PATHS}
+# Новое: формируем список допустимых путей на основе реестра PATHS
+# Дополнительно убираем лишнюю точку перед квадратной скобкой `.foo.[0]` → `foo[0]`
+def _normalize_dot_bracket(path: str) -> str:
+    return path.replace('.[', '[')
+
+_CERTIFICATE_ALLOWED_PATHS = {
+    _to_flatten_path(_normalize_dot_bracket(p))
+    for p in PATHS.values()
+}
+
+# Для отладки можно временно вывести разницу путей
+if logging.getLogger().isEnabledFor(logging.DEBUG):
+    logger.debug("CERTIFICATE_ALLOWED_PATHS: %s", _CERTIFICATE_ALLOWED_PATHS)
 
 def display_search_form():
     st.subheader("Параметры поиска")
@@ -402,14 +386,43 @@ def display_editable_merged_data() -> None:
     doc_type_detected = _extract_doc_type(merged_data).lower()
 
     if doc_type_detected == "certificate":
-        # оставляем только интересующие нас поля; учитываем возможный префикс ID
-        flat_items = [
-            item for item in flat_items
-            if item[0] in _CERTIFICATE_ALLOWED_PATHS or
-               any(item[0].endswith(f".{p}") or item[0].endswith(f".{p}") for p in _CERTIFICATE_ALLOWED_PATHS)
-        ]
+        allowed_exact = _CERTIFICATE_ALLOWED_PATHS
+
+        # Готовим regex-паттерны для путей с [n]
+        pattern_regexes: list[re.Pattern[str]] = []
+        for p in allowed_exact:
+            if "[n]" in p:
+                # превращаем foo[n].bar → ^foo\[\d+\]\.bar$
+                regex_str = re.escape(p).replace("\\[n\\]", r"\[\d+\]")
+                pattern_regexes.append(re.compile(f"^{regex_str}$"))
+
+        def _is_allowed(path: str) -> bool:
+            # 1. точное совпадение
+            if path in allowed_exact:
+                return True
+
+            # 2. совпадение по regex c [n]
+            for rgx in pattern_regexes:
+                if rgx.match(path):
+                    return True
+
+            # 3. поддержка числового ID-префикса первого уровня
+            m = re.match(r"^\d+\.(.+)$", path)
+            if m:
+                stripped = m.group(1)
+                if stripped in allowed_exact:
+                    return True
+                for rgx in pattern_regexes:
+                    if rgx.match(stripped):
+                        return True
+            return False
+
+        flat_items = [item for item in flat_items if _is_allowed(item[0])]
 
     df = pd.DataFrame(flat_items, columns=["Path", "Value"])
+
+    # Приводим все значения к строке, иначе Streamlit может заблокировать редактирование
+    df["Value"] = df["Value"].astype(str)
 
     # Таблица редактируется только по колонке Value
     edited_df = st.data_editor(

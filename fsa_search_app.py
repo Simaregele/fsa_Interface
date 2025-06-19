@@ -56,9 +56,18 @@ def show_search_interface():
         st.session_state.search_params = {k: v for k, v in search_params.items() if v}
         st.session_state.current_page = 0
 
+        # Сбрасываем кэш клиента и, при необходимости, создаём новый экземпляр
+        try:
+            client = FSAApiClient.get_instance()
+            client._last_search_response = None  # type: ignore[attr-defined]
+            client._last_merged_data = None      # type: ignore[attr-defined]
+        except RuntimeError:
+            # если инстанса ещё нет, ничего делать не нужно
+            pass
+
     if st.session_state.search_params:
         client = FSAApiClient.get_instance()
-        # !!!! Вот тут у нас 
+
         results = client.search(st.session_state.search_params, st.session_state.current_page)
 
         if results is not None:
