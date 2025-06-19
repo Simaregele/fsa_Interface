@@ -369,6 +369,18 @@ def _flatten_with_paths(data: Any, parent: str = "") -> List[tuple[str, Any]]:
     return parts
 
 
+# Определяем тип документа, допускаем вложенность на уровень ID
+def _extract_doc_type(d: dict) -> str:
+    if "docType" in d:
+        return str(d["docType"])
+    # пробуем найти во вложенном словаре первого уровня
+    if len(d) == 1:
+        v = next(iter(d.values()))
+        if isinstance(v, dict) and "docType" in v:
+            return str(v["docType"])
+    return ""
+
+
 def display_editable_merged_data() -> None:
     """Отображает кэшированный *merged_data* в виде редактируемой таблицы.
 
@@ -386,17 +398,6 @@ def display_editable_merged_data() -> None:
         return
 
     flat_items = _flatten_with_paths(merged_data)
-
-    # Определяем тип документа, допускаем вложенность на уровень ID
-    def _extract_doc_type(d: dict) -> str:
-        if "docType" in d:
-            return str(d["docType"])
-        # пробуем найти во вложенном словаре первого уровня
-        if len(d) == 1:
-            v = next(iter(d.values()))
-            if isinstance(v, dict) and "docType" in v:
-                return str(v["docType"])
-        return ""
 
     doc_type_detected = _extract_doc_type(merged_data).lower()
 

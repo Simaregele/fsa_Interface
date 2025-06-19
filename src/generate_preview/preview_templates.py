@@ -8,6 +8,54 @@ from typing import Any, Dict
 которые будут подменяться данными, приходящими от сервера.
 """
 
+VALUES_TEMPLATE: str = {
+        "certificate_number": "{RegistryNumber}",
+        "batch_number": "{RegistryID}",
+        "certification_body": (
+            "Орган по сертификации {RegistryData.certificationAuthority.fullName} "
+            "Место нахождения (адрес юридического лица): {RegistryData.certificationAuthority.addresses.0.fullAddress} "
+            "Адрес места осуществления деятельности: {RegistryData.certificationAuthority.addresses.0.fullAddress} "
+            "Аттестат аккредитации № {RegistryData.certificationAuthority.attestatRegNumber} "
+            "дата регистрации {RegistryData.certificationAuthority.attestatRegDate} "
+            "Телефон {RegistryData.certificationAuthority.contacts.[1].value} "
+            "Адрс электронной почты {RegistryData.certificationAuthority.contacts.[0].value}"
+        ),
+        "applicant": (
+            "{RegistryData.applicant.fullName} "
+            "Место нахождения (адрес юридического лица) и адрес осуществления деятельности: "
+            "{RegistryData.applicant.addresses.0.fullAddress} "
+            "Основной государственный регистрационный номер {RegistryData.applicant.ogrn} "
+            "Телефон {RegistryData.applicant.contacts.[1].value} "
+            "Адрес электронной почты {RegistryData.applicant.contacts.[0].value}"
+        ),
+        "manufacturer": (
+            "{RegistryData.manufacturer.fullName} "
+            "Место нахождения (адрес юридического лица) и адрес осуществления деятельности: "
+            "{RegistryData.manufacturer.addresses.0.fullAddress}"
+        ),
+        "product_description": "{RegistryData.product.fullName} {RegistryData.product.identifications.[0].name}",
+        "tn_ved_codes": "{search_Product.Tnveds[n]}",
+        "technical_regulation": "{RegistryData.product.identifications.[0].documents.[0].name}",
+        "test_reports": "Протокол испытаний {RegistryData.testingLabs.[n].protocols.[0].number} "
+                        "от {RegistryData.testingLabs.[n].protocols.[0].date} "
+                        "выданных {RegistryData.testingLabs.[n].fullName} Схема сертификации 1с",
+        "standards_and_conditions": (
+            "{RegistryData.product.identifications.[0].standards.[n].designation} "
+            "{RegistryData.product.identifications.[0].standards.[n].name} "
+            "Общие технические условия {RegistryData.product.storageCondition} "
+            "{RegistryData.product.usageCondition} {RegistryData.product.usageScope}"
+        ),
+        "issue_date": "{RegistryData.certRegDate}",
+        "expiry_date": "{RegistryData.certEndDate}",
+        "expert_name": "{RegistryData.experts.[0].surname} "
+                       "{RegistryData.experts.[0].firstName} "
+                       "{RegistryData.experts.[0].patronimyc}",
+        "head_of_certification_body": "{RegistryData.certificationAuthority.surname} "
+                                      "{RegistryData.certificationAuthority.firstName} "
+                                      "{RegistryData.certificationAuthority.patronymic}"
+    }
+
+
 DECLARATION_PREVIEW_TEMPLATE: str = (
     "Заявитель {RegistryData.applicant.fullName}\n"
     "Место нахождения (адрес юридического лица) и адрес места осуществления деятельности: "
