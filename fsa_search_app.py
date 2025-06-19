@@ -61,6 +61,7 @@ def show_search_interface():
             client = FSAApiClient.get_instance()
             client._last_search_response = None  # type: ignore[attr-defined]
             client._last_merged_data = None      # type: ignore[attr-defined]
+            clear_generated_documents()
         except RuntimeError:
             # если инстанса ещё нет, ничего делать не нужно
             pass

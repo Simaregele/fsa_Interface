@@ -46,8 +46,6 @@ def display_certificate_preview_templates(selected_details: dict, selected_searc
         return
 
     for doc_id, details in selected_details.items():
-        search_json = selected_search_data.get(doc_id, {})
-
         # Используем build_payload, чтобы получить правильный merged_data точно так же,
         # как перед отправкой в генератор документов.
         client = FSAApiClient.get_instance()

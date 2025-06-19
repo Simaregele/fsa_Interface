@@ -4,7 +4,7 @@ from typing import Dict, Any, Union, Optional, Tuple
 import logging
 from config.config import load_config
 from src.api.client import FSAApiClient  # локальный импорт, чтобы избежать циклов
-from src.utils.json_path_registry import get_value as gv
+
 
 
 config = load_config()
@@ -36,23 +36,6 @@ def utf8_encode_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def get_nested_value(data: Dict[str, Any], path: str, default: Any = '') -> Any:
-    keys = path.split('.')
-    print('keys', keys)
-    value = data
-    for key in keys:
-        if key.endswith(']'):
-            key, index = key[:-1].split('[')
-            try:
-                value = value.get(key, [])[int(index)]
-            except (IndexError, TypeError):
-                return default
-        else:
-            value = value.get(key, {})
-        if value == {}:
-            return default
-    return value if value != {} else default
-
 
 def stringify_values(obj):
     if isinstance(obj, dict):
@@ -65,109 +48,6 @@ def stringify_values(obj):
         return str(obj)
 
 
-def process_complex_json(data: Dict[str, Any]) -> Dict[str, str]:
-    logging.info("Входные данные: %s", json.dumps(data, ensure_ascii=False, indent=2))
-    data = stringify_values(data)
-    result = {}
-    result.update(process_registry_data(data))
-    result.update(process_certification_body(data))
-    result.update(process_applicant(data))
-    result.update(process_manufacturer(data))
-    result.update(process_product_info(data))
-    result.update(process_test_reports(data))
-    result.update(process_dates_and_personnel(data))
-    return result
-
-
-def process_registry_data(data: Dict[str, Any]) -> Dict[str, str]:
-    """Основные идентификаторы сертификата."""
-    return {
-        'certificate_number': gv(data, 'certificate_number'),
-        'batch_number': gv(data, 'batch_number'),
-    }
-
-
-def process_certification_body(data: Dict[str, Any]) -> Dict[str, str]:
-    """Составляем строку об органе по сертификации через PATHS."""
-    return {
-        'certification_body': (
-            f"Название: {gv(data, 'certification_body_fullName')}\n"
-            f"Адрес: {gv(data, 'certification_body_address')}\n"
-            f"Телефон: {gv(data, 'certification_body_phone')}\n"
-            f"Email: {gv(data, 'certification_body_email')}\n"
-            f"Аттестат аккредитации: {gv(data, 'certification_body_attestatRegNumber')}\n"
-            f"Дата регистрации: {gv(data, 'certification_body_attestatRegDate')}"
-        )
-    }
-
-
-def process_applicant(data: Dict[str, Any]) -> Dict[str, str]:
-    return {
-        'applicant': (
-            f"Название: {gv(data, 'applicant_fullname')}\n"
-            f"Адрес: {gv(data, 'applicant_address')}\n"
-            f"ОГРН: {gv(data, 'applicant_ogrn')}\n"
-            f"Телефон: {gv(data, 'applicant_phone')}\n"
-            f"Email: {gv(data, 'applicant_email')}"
-        )
-    }
-
-
-def process_manufacturer(data: Dict[str, Any]) -> Dict[str, str]:
-    return {
-        'manufacturer': (
-            f"Название: {gv(data, 'manufacturer_fullname')}\n"
-            f"Адрес: {gv(data, 'manufacturer_address')}"
-        )
-    }
-
-
-def process_product_info(data: Dict[str, Any]) -> Dict[str, str]:
-    return {
-        'product_description': gv(data, 'product_description_name'),
-        'tn_ved_codes': gv(data, 'tn_ved_codes'),
-        'technical_regulation': gv(data, 'technical_regulation'),
-        'standards_and_conditions': gv(data, 'standards_and_conditions_storageCondition'),
-    }
-
-
-def process_test_reports(data: Dict[str, Any]) -> Dict[str, str]:
-    """Готовим строку тест-протоколов (номер: дата: лаборатория)."""
-    numbers = gv(data, 'test_reports_number')
-    dates = gv(data, 'test_reports_date')
-    names = gv(data, 'test_reports_fullname')
-
-    # все три могут быть списками через ", " – разделяем на массивы
-    nums_list = [x.strip() for x in str(numbers).split(',') if x]
-    dates_list = [x.strip() for x in str(dates).split(',') if x]
-    names_list = [x.strip() for x in str(names).split(',') if x]
-
-    max_len = max(len(nums_list), len(dates_list), len(names_list))
-    result_rows: list[str] = []
-    for i in range(max_len):
-        row = f"{nums_list[i] if i < len(nums_list) else ''}: " \
-              f"{dates_list[i] if i < len(dates_list) else ''}: " \
-              f"{names_list[i] if i < len(names_list) else ''}"
-        result_rows.append(row.strip(': '))
-
-    return {'test_reports': '\n'.join(result_rows)}
-
-
-def process_dates_and_personnel(data: Dict[str, Any]) -> Dict[str, str]:
-    return {
-        'issue_date': gv(data, 'issue_date'),
-        'expiry_date': gv(data, 'expiry_date'),
-        'expert_name': ' '.join([
-            gv(data, 'expert_name_surname'),
-            gv(data, 'expert_name_name'),
-            gv(data, 'expert_name_patronymic')
-        ]).strip(),
-        'head_of_certification_body': ' '.join([
-            gv(data, 'head_of_certification_body_surname'),
-            gv(data, 'head_of_certification_body_first_name'),
-            gv(data, 'head_of_certification_body_patronymic')
-        ]).strip(),
-    }
 
 
 def build_payload() -> Tuple[Dict[str, Any], Dict[str, Any]]:
