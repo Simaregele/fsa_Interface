@@ -196,7 +196,7 @@ def generate_documents(details: Dict[str, Any], search_data: Optional[Dict[str, 
         # Формируем payload в отдельной функции
         payload, merged_data = build_payload()
 
-        generate_url = f"{config['LOCAL_CERTIFICATE_API_URL']}/generate_documents"
+        generate_url = f"{config['CERTIFICATE_API_URL']}/generate_documents"
 
         logger.info("Отправка запроса на генерацию документов: %s", generate_url)
         logger.debug("Payload: %s", json.dumps(payload, ensure_ascii=False))
