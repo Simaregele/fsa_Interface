@@ -43,6 +43,6 @@
     "max_retries": 3,
     "timeout": 30,
     "LOCAL_CERTIFICATE_API_URL": "http://localhost:8002",
-    "CERTIFICATE_API_URL": "http://localhost:8002",
+    "CERTIFICATE_API_URL": "http://91.92.136.247:8001",
     "just_info": "не локал http://91.92.136.247:8001 а вот локал http://localhost:8002 и я меняю их"
 }

@@ -27,8 +27,14 @@ logger = logging.getLogger(__name__)
 
 PATHS: dict[str, str] = {
     # Примеры, удалите после заполнения
-    # "applicant_fullname": "RegistryData.applicant.fullName",
-    # "applicant_address": "RegistryData.applicant.addresses[0].fullAddress",
+    "applicant_fullname": "RegistryData.applicant.fullName",
+    "applicant_address": "RegistryData.applicant.addresses[0].fullAddress",
+    "certification_body_fullName": "RegistryData.certificationAuthority.fullName",
+    "certification_body_address": "RegistryData.certificationAuthority.addresses[0].fullAddress",
+    "certification_body_phone": "RegistryData.certificationAuthority.phone",
+    "certification_body_email": "RegistryData.certificationAuthority.email",
+    "certification_body_website": "RegistryData.certificationAuthority.website",
+    "certification_body_logo": "RegistryData.certificationAuthority.logo",
 }
 
 # ---------------------------------------------------------------------------
