@@ -1,6 +1,9 @@
 import re
 from typing import Any, Dict
 
+# --- Новое: берём ключи и функции из реестра путей
+from src.utils.json_path_registry import get_value as gv, reverse_lookup, PATHS
+
 
 
 """Содержит шаблоны предпросмотра документов.
@@ -212,6 +215,17 @@ def render_certificate_preview(merged_data: Dict[str, Any]) -> str:
 
     def _replace(match: re.Match[str]) -> str:  # noqa: D401
         placeholder_path = match.group(1)
+
+        # 0) Если в PATHS уже есть такой ключ, берём сразу
+        if placeholder_path in PATHS:
+            return str(gv(merged_data, placeholder_path, ''))
+
+        # 1) Пытаемся найти ключ по путю и взять значение напрямую
+        key = reverse_lookup(placeholder_path)
+        if key:
+            return str(gv(merged_data, key, ''))
+
+        # 2) Fallback – старый механизм прямого разбора пути
         return _resolve_path(merged_data, placeholder_path)
 
     filled = _PLACEHOLDER_RE.sub(_replace, template)

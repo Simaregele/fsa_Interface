@@ -136,53 +136,6 @@ def get_value(data: Dict[str, Any], key: str, default: Any = "") -> Any:
         return filtered[0]
     return ", ".join(str(v) for v in filtered)
 
-
-def set_value(data: Dict[str, Any], key: str, value: Any) -> None:
-    """Записывает *value* по *ключу* в *data* (in-place).
-
-    Если часть пути отсутствует – создаёт вложенные dict / list автоматически.
-    Исключений не бросает; при невозможности записи пишет предупреждение.
-    """
-    if key not in PATHS:
-        logger.warning("Ключ '%s' не найден в PATHS", key)
-        return
-
-    path = PATHS[key]
-    tokens = _split_tokens(path)
-
-    current: Any = data
-    for idx, token in enumerate(tokens):
-        is_last = idx == len(tokens) - 1
-        list_match = _LIST_INDEX_RE.fullmatch(token)
-        if list_match:
-            dict_key, index_raw = list_match.group(1), list_match.group(2)
-            # Гарантируем наличие списка
-            if not isinstance(current.get(dict_key, None), list):
-                current[dict_key] = []
-            seq = current[dict_key]
-            if index_raw == 'n':
-                logger.warning("Нельзя назначить значение по пути с [n]: %s", path)
-                return
-            index = int(index_raw)
-            # Расширяем список при необходимости
-            while len(seq) <= index:
-                seq.append({})
-            if is_last:
-                seq[index] = value
-            else:
-                if not isinstance(seq[index], dict):
-                    seq[index] = {}
-                current = seq[index]
-        else:
-            # Обычный ключ словаря
-            if is_last:
-                current[token] = value
-            else:
-                if token not in current or not isinstance(current[token], dict):
-                    current[token] = {}
-                current = current[token]
-
-
 # ---------------------------------------------------------------------------
 # Обратное отображение «путь → ключ» (генерируется по требованию)
 # ---------------------------------------------------------------------------

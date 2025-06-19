@@ -68,7 +68,6 @@ def show_search_interface():
 
     if st.session_state.search_params:
         client = FSAApiClient.get_instance()
-
         results = client.search(st.session_state.search_params, st.session_state.current_page)
 
         if results is not None:

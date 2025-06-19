@@ -42,9 +42,6 @@ def display_certificate_preview_templates(selected_details: dict, selected_searc
         selected_search_data: данные из поиска, формат {doc_id: search_json}
     """
 
-    if not selected_details:
-        return
-
     for doc_id, details in selected_details.items():
         # Используем build_payload, чтобы получить правильный merged_data точно так же,
         # как перед отправкой в генератор документов.
