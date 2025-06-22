@@ -2,7 +2,7 @@ import re
 from typing import Any, Dict
 
 # --- Новое: берём ключи и функции из реестра путей
-from src.utils.json_path_registry import get_value as gv, reverse_lookup, PATHS
+from src.utils.json_path_registry import get_value as gv, reverse_lookup, ALL_PATHS
 
 
 
@@ -29,7 +29,7 @@ DECLARATION_PREVIEW_TEMPLATE: str = (
     "Продукция изготовлена в соответствии с требованиями Директивы 2001/95/ЕС.\n"
     "Код (коды) ТН ВЭД ЕАЭС: {product_codes_tnveds}\n"
     "Серийный выпуск соответствует требованиям {products_standarts}\n"
-    "Декларация о соответствии принята на основании {testing_labs}\n"
+    "Декларация о соответствии принята на основании Протокол испытаний {testing_labs_number} от {testing_labs_date} выданных {testing_labs_fullname}\n"
     "Дополнительная информация {standards_and_conditions_doc_name} "
     "{standards_and_conditions_storage} {standards_and_conditions_usage} {standards_and_conditions_scope}"
 )
@@ -169,8 +169,8 @@ def render_certificate_preview(merged_data: Dict[str, Any]) -> str:
     def _replace(match: re.Match[str]) -> str:  # noqa: D401
         placeholder_path = match.group(1)
 
-        # 0) Если в PATHS уже есть такой ключ, берём сразу
-        if placeholder_path in PATHS:
+        # 0) Если ключ зарегистрирован (в любом из словарей), берём сразу
+        if placeholder_path in ALL_PATHS:
             return str(gv(merged_data, placeholder_path, ''))
 
         # 1) Пытаемся найти ключ по путю и взять значение напрямую

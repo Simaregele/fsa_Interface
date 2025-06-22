@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Основной словарь путей
 # ---------------------------------------------------------------------------
 
+# Основные пути для сертификатов
 PATHS: dict[str, str] = {
     "certificate_number": "RegistryNumber",
     "batch_number": "RegistryID",
@@ -63,6 +64,8 @@ PATHS: dict[str, str] = {
     "head_of_certification_body_patronymic": "RegistryData.certificationAuthority.patronymic"
 }
 
+# Пути, специфичные для деклараций (обратите внимание на опечатку в названии переменной,
+# оставляем как есть для совместимости с текущим кодом)
 PATHS_DECLARAION: dict[str, str] = {
     "certificate_number": "RegistryNumber",
     "applicant_fullname": "RegistryData.applicant.fullName",
@@ -84,8 +87,12 @@ PATHS_DECLARAION: dict[str, str] = {
     "product_producer_name": "RegistryData.manufacturer.fullName",
     "product_producer_address": "RegistryData.manufacturer.addresses[0].fullAddress",
     "product_codes_tnveds": "search_Product.Tnveds[n]",
-    "products_standarts": "RegistryData.product.identifications[0].documents",
-    "testing_labs": "RegistryData.testingLabs",
+    "products_standarts": "RegistryData.product.identifications[0].documents[n].name",
+
+    "testing_labs_number": "RegistryData.testingLabs[n].protocols[0].number",
+    "testing_labs_date": "RegistryData.testingLabs[n].protocols[0].date",
+    "testing_labs_fullname": "RegistryData.testingLabs[n].fullName",
+
     "declaration_start_date": "RegistryData.declRegDate",
     "declaration_end_date": "RegistryData.declEndDate",
 
@@ -96,6 +103,14 @@ PATHS_DECLARAION: dict[str, str] = {
     "filial_table": "RegistryData.manufacturerFilials"
 }
 
+# ---------------------------------------------------------------------------
+# Объединённый словарь для универсальных функций
+# ---------------------------------------------------------------------------
+
+ALL_PATHS: dict[str, str] = {
+    **PATHS,            # базовые ключи
+    **PATHS_DECLARAION  # ключи деклараций (при совпадении побеждает значение из декларации)
+}
 
 # ---------------------------------------------------------------------------
 # Внутренние помощники
@@ -151,12 +166,15 @@ def _traverse(current: Any, tokens: List[str]) -> List[Any]:
 
 
 def get_value(data: Dict[str, Any], key: str, default: Any = "") -> Any:
-    """Возвращает значение по *ключу*, поддерживая индексы и [n]."""
-    if key not in PATHS:
-        logger.warning("Ключ '%s' не найден в PATHS", key)
+    """Возвращает значение по *ключу*, поддерживая индексы и [n].
+
+    Теперь поддерживаются как ключи из `PATHS`, так и из `PATHS_DECLARAION`.
+    """
+    if key not in ALL_PATHS:
+        logger.warning("Ключ '%s' не найден в ALL_PATHS", key)
         return default
 
-    path = PATHS[key]
+    path = ALL_PATHS[key]
     tokens = _split_tokens(path)
 
     values = _traverse(data, tokens)
@@ -175,8 +193,8 @@ def get_value(data: Dict[str, Any], key: str, default: Any = "") -> Any:
 # ---------------------------------------------------------------------------
 
 def reverse_lookup(path: str) -> str | None:
-    """Возвращает ключ по строковому пути, если он зарегистрирован."""
-    for k, v in PATHS.items():
+    """Возвращает ключ по строковому пути, если он зарегистрирован в любом из словарей."""
+    for k, v in ALL_PATHS.items():
         if v == path:
             return k
     return None 
