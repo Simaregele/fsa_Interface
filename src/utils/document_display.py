@@ -50,6 +50,6 @@ def display_certificate_preview_templates(selected_details: dict, selected_searc
 
 
         preview_text = render_certificate_preview(merged_data)
-        st.subheader(f"Предпросмотр сертификата {doc_id}")
+        st.subheader(f"Предпросмотр документа {doc_id}")
         st.markdown(preview_text.replace("\n", "<br>"), unsafe_allow_html=True)
 

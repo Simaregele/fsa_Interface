@@ -63,6 +63,40 @@ PATHS: dict[str, str] = {
     "head_of_certification_body_patronymic": "RegistryData.certificationAuthority.patronymic"
 }
 
+PATHS_DECLARAION: dict[str, str] = {
+    "certificate_number": "RegistryNumber",
+    "applicant_fullname": "RegistryData.applicant.fullName",
+    "applicant_address": "RegistryData.applicant.addresses[0].fullAddress",
+    "applicant_ogrn": "RegistryData.applicant.ogrn",
+    "applicant_phone": "RegistryData.applicant.contacts[1].value",
+    "applicant_email": "RegistryData.applicant.contacts[0].value",
+    "organization_head_fullname_signature_name": "RegistryData.applicant.firstName",
+    "organization_head_fullname_signature_surname": "RegistryData.applicant.surname",
+    "organization_head_fullname_signature_patronymic": "RegistryData.applicant.patronimyc",
+    "organization_head_fullname_head_position": "RegistryData.applicant.headPosition",
+    "organization_head_fullname_head_position_name": "RegistryData.applicant.firstName",
+    "organization_head_fullname_head_position_surname": "RegistryData.applicant.surname",
+    "organization_head_fullname_head_position_patronymic": "RegistryData.applicant.patronimyc",
+    
+    "product_fullname": "RegistryData.product.fullName",
+    "product_fullname": "RegistryData.product.fullName",
+    "product_name_sec_part": "RegistryData.product.identifications[0].name",
+    "product_producer_name": "RegistryData.manufacturer.fullName",
+    "product_producer_address": "RegistryData.manufacturer.addresses[0].fullAddress",
+    "product_codes_tnveds": "search_Product.Tnveds[n]",
+    "products_standarts": "RegistryData.product.identifications[0].documents",
+    "testing_labs": "RegistryData.testingLabs",
+    "declaration_start_date": "RegistryData.declRegDate",
+    "declaration_end_date": "RegistryData.declEndDate",
+
+    "standards_and_conditions_doc_name": "RegistryData.product.identifications[0].documents[0].name",
+    "standards_and_conditions_storage": "RegistryData.product.storageCondition",
+    "standards_and_conditions_usage": "RegistryData.product.usageCondition",
+    "standards_and_conditions_scope": "RegistryData.product.usageScope",
+    "filial_table": "RegistryData.manufacturerFilials"
+}
+
+
 # ---------------------------------------------------------------------------
 # Внутренние помощники
 # ---------------------------------------------------------------------------

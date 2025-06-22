@@ -7,7 +7,7 @@ from src.manual_db_update.updater_handlers import process_table_changes
 from src.api.document_updater import DocumentUpdateRequest, Product, Manufacturer, Branch
 from typing import List, Dict, Any
 from src.api.client import FSAApiClient
-from src.utils.json_path_registry import PATHS
+from src.utils.json_path_registry import PATHS, PATHS_DECLARAION
 import pandas as pd
 import re as _re
 import re
@@ -35,9 +35,15 @@ _CERTIFICATE_ALLOWED_PATHS = {
     for p in PATHS.values()
 }
 
-# Для отладки можно временно вывести разницу путей
+# Аналогичный набор путей для деклараций
+_DECLARATION_ALLOWED_PATHS = {
+    _to_flatten_path(_normalize_dot_bracket(p))
+    for p in PATHS_DECLARAION.values()
+}
+
+# Для отладки выводим и декларационные пути
 if logging.getLogger().isEnabledFor(logging.DEBUG):
-    logger.debug("CERTIFICATE_ALLOWED_PATHS: %s", _CERTIFICATE_ALLOWED_PATHS)
+    logger.debug("DECLARATION_ALLOWED_PATHS: %s", _DECLARATION_ALLOWED_PATHS)
 
 def display_search_form():
     st.subheader("Параметры поиска")
@@ -387,6 +393,40 @@ def display_editable_merged_data() -> None:
 
     if doc_type_detected == "certificate":
         allowed_exact = _CERTIFICATE_ALLOWED_PATHS
+
+        # Готовим regex-паттерны для путей с [n]
+        pattern_regexes: list[re.Pattern[str]] = []
+        for p in allowed_exact:
+            if "[n]" in p:
+                # превращаем foo[n].bar → ^foo\[\d+\]\.bar$
+                regex_str = re.escape(p).replace("\\[n\\]", r"\[\d+\]")
+                pattern_regexes.append(re.compile(f"^{regex_str}$"))
+
+        def _is_allowed(path: str) -> bool:
+            # 1. точное совпадение
+            if path in allowed_exact:
+                return True
+
+            # 2. совпадение по regex c [n]
+            for rgx in pattern_regexes:
+                if rgx.match(path):
+                    return True
+
+            # 3. поддержка числового ID-префикса первого уровня
+            m = re.match(r"^\d+\.(.+)$", path)
+            if m:
+                stripped = m.group(1)
+                if stripped in allowed_exact:
+                    return True
+                for rgx in pattern_regexes:
+                    if rgx.match(stripped):
+                        return True
+            return False
+
+        flat_items = [item for item in flat_items if _is_allowed(item[0])]
+
+    if doc_type_detected == "declaration":
+        allowed_exact = _DECLARATION_ALLOWED_PATHS
 
         # Готовим regex-паттерны для путей с [n]
         pattern_regexes: list[re.Pattern[str]] = []
