@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any, Dict, List
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -113,11 +114,25 @@ ALL_PATHS: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
+# Ключи, значения которых являются датами и требуют форматирования DD.MM.YYYY
+# ---------------------------------------------------------------------------
+
+_DATE_KEYS: set[str] = {
+    # Дата сертификата
+    "test_reports_date", "issue_date", "expiry_date", "certification_body_attestatRegDate",
+    # Дата декларации
+    "testing_labs_date", "declaration_start_date", "declaration_end_date",
+}
+
+# ---------------------------------------------------------------------------
 # Внутренние помощники
 # ---------------------------------------------------------------------------
 
 _LIST_INDEX_RE = re.compile(r"^(\w+)\[(\d+|n)\]$")
 
+_ISO_DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DASH_DATE_RE = re.compile(r"^\d{2}-\d{2}-\d{4}$")
 
 def _split_tokens(path: str) -> List[str]:
     """Разбивает путь на токены, учитывая нотацию списков."""
@@ -127,6 +142,23 @@ def _split_tokens(path: str) -> List[str]:
         tokens.append(raw)
     return tokens
 
+def _format_date_str(s: str) -> str:
+    """Преобразует дату из форматов:
+    • YYYY-MM-DDTHH:MM:SSZ
+    • YYYY-MM-DD
+    • DD-MM-YYYY
+    в формат DD.MM.YYYY. Если строка не является датой – возвращается без изменений.
+    """
+    if _ISO_DATETIME_RE.fullmatch(s):
+        dt = datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ")
+        return dt.strftime("%d.%m.%Y")
+    if _ISO_DATE_RE.fullmatch(s):
+        dt = datetime.strptime(s, "%Y-%m-%d")
+        return dt.strftime("%d.%m.%Y")
+    if _DASH_DATE_RE.fullmatch(s):
+        day, month, year = s.split("-")
+        return f"{day}.{month}.{year}"
+    return s
 
 # ---------------------------------------------------------------------------
 # Публичный API
@@ -178,15 +210,23 @@ def get_value(data: Dict[str, Any], key: str, default: Any = "") -> Any:
     tokens = _split_tokens(path)
 
     values = _traverse(data, tokens)
+
+    # 1. Фильтруем пустые
     filtered = [v for v in values if v not in (None, {}, [])]
 
-    if not filtered:
+    # 2. При необходимости превращаем в строку и форматируем дату
+    if key in _DATE_KEYS:
+        str_values = [_format_date_str(str(v)) for v in filtered]
+    else:
+        str_values = [str(v) for v in filtered]
+
+    if not str_values:
         return default
 
     # Если единственное значение – возвращаем как есть, иначе объединяем строкой
-    if len(filtered) == 1:
-        return filtered[0]
-    return ", ".join(str(v) for v in filtered)
+    if len(str_values) == 1:
+        return str_values[0]
+    return ", ".join(str_values)
 
 # ---------------------------------------------------------------------------
 # Обратное отображение «путь → ключ» (генерируется по требованию)
