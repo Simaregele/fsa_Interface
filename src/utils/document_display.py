@@ -42,12 +42,7 @@ def display_certificate_preview_templates(selected_details: dict, selected_searc
         selected_search_data: данные из поиска, формат {doc_id: search_json}
     """
 
-    if not selected_details:
-        return
-
     for doc_id, details in selected_details.items():
-        search_json = selected_search_data.get(doc_id, {})
-
         # Используем build_payload, чтобы получить правильный merged_data точно так же,
         # как перед отправкой в генератор документов.
         client = FSAApiClient.get_instance()
@@ -55,6 +50,6 @@ def display_certificate_preview_templates(selected_details: dict, selected_searc
 
 
         preview_text = render_certificate_preview(merged_data)
-        st.subheader(f"Предпросмотр сертификата {doc_id}")
+        st.subheader(f"Предпросмотр документа {doc_id}")
         st.markdown(preview_text.replace("\n", "<br>"), unsafe_allow_html=True)
 
