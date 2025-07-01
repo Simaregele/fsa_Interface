@@ -237,4 +237,35 @@ def reverse_lookup(path: str) -> str | None:
     for k, v in ALL_PATHS.items():
         if v == path:
             return k
-    return None 
+    return None
+
+# ---------------------------------------------------------------------------
+# Публичная утилита: рекурсивное форматирование дат в структуре данных
+# ---------------------------------------------------------------------------
+
+def format_dates_inplace(data: Any) -> None:  # noqa: D401
+    """Рекурсивно обходит *data* (dict/list/str) и преобразует строки-даты
+    формата ISO (``YYYY-MM-DD`` или ``YYYY-MM-DDTHH:MM:SSZ``) и формата с дефисами
+    ``DD-MM-YYYY`` → ``DD.MM.YYYY``. Изменения выполняются *in-place*.
+    """
+
+    match data:
+        case dict():
+            for k, v in data.items():
+                if isinstance(v, (dict, list)):
+                    format_dates_inplace(v)
+                elif isinstance(v, str):
+                    new_v = _format_date_str(v)
+                    if new_v != v:
+                        data[k] = new_v
+        case list():
+            for idx, item in enumerate(data):
+                if isinstance(item, (dict, list)):
+                    format_dates_inplace(item)
+                elif isinstance(item, str):
+                    new_item = _format_date_str(item)
+                    if new_item != item:
+                        data[idx] = new_item
+        case _:
+            # остальные типы не изменяем
+            pass 

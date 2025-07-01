@@ -7,12 +7,12 @@ from src.manual_db_update.updater_handlers import process_table_changes
 from src.api.document_updater import DocumentUpdateRequest, Product, Manufacturer, Branch
 from typing import List, Dict, Any
 from src.api.client import FSAApiClient
-from src.utils.json_path_registry import PATHS, PATHS_DECLARAION
+from src.utils.json_path_registry import PATHS, PATHS_DECLARAION, ALL_PATHS
 import pandas as pd
 import re as _re
-import re
 
 from src.ui.model import TableColumns
+from src.generate_preview.new_cert_api_values import render_data_to_api, data_to_api_declaration  # локальный импорт
 
 # Настройка логгера
 logger = logging.getLogger(__name__)
@@ -387,102 +387,43 @@ def display_editable_merged_data() -> None:
         st.info("Нет данных для отображения")
         return
 
-    flat_items = _flatten_with_paths(merged_data)
+    # -------------------------------------------------------------
+    # Отображаем и редактируем данные для API (templated values)
+    # -------------------------------------------------------------
 
-    doc_type_detected = _extract_doc_type(merged_data).lower()
 
-    if doc_type_detected == "certificate":
-        allowed_exact = _CERTIFICATE_ALLOWED_PATHS
 
-        # Готовим regex-паттерны для путей с [n]
-        pattern_regexes: list[re.Pattern[str]] = []
-        for p in allowed_exact:
-            if "[n]" in p:
-                # превращаем foo[n].bar → ^foo\[\d+\]\.bar$
-                regex_str = re.escape(p).replace("\\[n\\]", r"\[\d+\]")
-                pattern_regexes.append(re.compile(f"^{regex_str}$"))
+    templated = render_data_to_api(merged_data)
+    doc_id_for_tpl = str(
+        merged_data.get("ID")
+        or merged_data.get("search_ID")
+        or merged_data.get("RegistryID")
+        or ""
+    )
 
-        def _is_allowed(path: str) -> bool:
-            # 1. точное совпадение
-            if path in allowed_exact:
-                return True
+    # добавляем пользовательские overrides, если есть
+    templated.update(client.get_template_overrides(doc_id_for_tpl))
 
-            # 2. совпадение по regex c [n]
-            for rgx in pattern_regexes:
-                if rgx.match(path):
-                    return True
+    templ_df = pd.DataFrame(
+        [{"Key": k, "Value": v} for k, v in templated.items()],
+        columns=["Key", "Value"],
+    )
+    templ_df["Value"] = templ_df["Value"].astype(str)
 
-            # 3. поддержка числового ID-префикса первого уровня
-            m = re.match(r"^\d+\.(.+)$", path)
-            if m:
-                stripped = m.group(1)
-                if stripped in allowed_exact:
-                    return True
-                for rgx in pattern_regexes:
-                    if rgx.match(stripped):
-                        return True
-            return False
-
-        flat_items = [item for item in flat_items if _is_allowed(item[0])]
-
-    if doc_type_detected == "declaration":
-        allowed_exact = _DECLARATION_ALLOWED_PATHS
-
-        # Готовим regex-паттерны для путей с [n]
-        pattern_regexes: list[re.Pattern[str]] = []
-        for p in allowed_exact:
-            if "[n]" in p:
-                # превращаем foo[n].bar → ^foo\[\d+\]\.bar$
-                regex_str = re.escape(p).replace("\\[n\\]", r"\[\d+\]")
-                pattern_regexes.append(re.compile(f"^{regex_str}$"))
-
-        def _is_allowed(path: str) -> bool:
-            # 1. точное совпадение
-            if path in allowed_exact:
-                return True
-
-            # 2. совпадение по regex c [n]
-            for rgx in pattern_regexes:
-                if rgx.match(path):
-                    return True
-
-            # 3. поддержка числового ID-префикса первого уровня
-            m = re.match(r"^\d+\.(.+)$", path)
-            if m:
-                stripped = m.group(1)
-                if stripped in allowed_exact:
-                    return True
-                for rgx in pattern_regexes:
-                    if rgx.match(stripped):
-                        return True
-            return False
-
-        flat_items = [item for item in flat_items if _is_allowed(item[0])]
-
-    df = pd.DataFrame(flat_items, columns=["Path", "Value"])
-
-    # Приводим все значения к строке, иначе Streamlit может заблокировать редактирование
-    df["Value"] = df["Value"].astype(str)
-
-    # Таблица редактируется только по колонке Value
-    edited_df = st.data_editor(
-        df,
+    edited_templ_df = st.data_editor(
+        templ_df,
         column_config={
-            "Path": st.column_config.Column("Путь", disabled=True),
+            "Key": st.column_config.Column("Ключ", disabled=True),
             "Value": st.column_config.TextColumn("Значение"),
         },
         num_rows="fixed",
         use_container_width=True,
+        key="api_data_editor",
     )
 
-    if st.button("Сохранить изменения"):
-        for _, row in edited_df.iterrows():
-            original_value = df.loc[row.name, "Value"]
-            if str(row["Value"]) != str(original_value):
-                logger.info(
-                    "Изменение merged_data: path=%s, old=%s, new=%s",
-                    row["Path"], original_value, row["Value"],
-                )
-                client.update_merged_data(row["Path"], row["Value"])
-
-        st.success("Изменения сохранены")
+    if st.button("Сохранить данные API"):
+        for _, row in edited_templ_df.iterrows():
+            orig_val = templ_df.loc[row.name, "Value"]
+            if str(row["Value"]) != str(orig_val):
+                client.upsert_template_value(doc_id_for_tpl, row["Key"], row["Value"])
+        st.success("Данные API обновлены")
