@@ -1,10 +1,14 @@
 import logging
 import streamlit as st
 from src.utils.document_download import display_document_download_button
-from src.generate_preview.preview_templates import CERTIFICATE_PREVIEW_TEMPLATE
-from src.generate_preview.preview_templates import render_certificate_preview
+from src.generate_preview.preview_templates import (
+    CERTIFICATE_PREVIEW_TEMPLATE,
+    DECLARATION_PREVIEW_TEMPLATE,
+)
 from src.utils.certificate_generator import build_payload  # NEW IMPORT
 from src.api.client import FSAApiClient
+from collections import defaultdict
+from src.generate_preview.new_cert_api_values import render_data_to_api
 
 # Логгер модуля
 logger = logging.getLogger(__name__)
@@ -43,13 +47,26 @@ def display_certificate_preview_templates(selected_details: dict, selected_searc
     """
 
     for doc_id, details in selected_details.items():
-        # Используем build_payload, чтобы получить правильный merged_data точно так же,
-        # как перед отправкой в генератор документов.
         client = FSAApiClient.get_instance()
-        merged_data  = client.get_last_merged_data()
+        merged_data = client.get_last_merged_data() or {}
 
+        # Формируем templated + применяем overrides
+        templated = render_data_to_api(merged_data)
+        doc_id_for_tpl = str(
+            merged_data.get("ID")
+            or merged_data.get("search_ID")
+            or merged_data.get("RegistryID")
+            or ""
+        )
+        templated.update(client.get_template_overrides(doc_id_for_tpl))
 
-        preview_text = render_certificate_preview(merged_data)
+        # Выбираем шаблон по типу
+        doc_type_raw = str(merged_data.get("docType", "")).lower()
+        use_declaration = doc_type_raw.startswith("declaration")
+        template = DECLARATION_PREVIEW_TEMPLATE if use_declaration else CERTIFICATE_PREVIEW_TEMPLATE
+
+        # Подставляем значения, безопасно обрабатывая отсутствующие ключи
+        preview_text = template.format_map(defaultdict(str, templated))
         st.subheader(f"Предпросмотр документа {doc_id}")
         st.markdown(preview_text.replace("\n", "<br>"), unsafe_allow_html=True)
 

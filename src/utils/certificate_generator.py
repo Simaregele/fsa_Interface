@@ -4,6 +4,7 @@ from typing import Dict, Any, Union, Optional, Tuple
 import logging
 from config.config import load_config
 from src.api.client import FSAApiClient  # локальный импорт, чтобы избежать циклов
+from src.generate_preview.new_cert_api_values import render_data_to_api
 
 
 
@@ -61,7 +62,20 @@ def build_payload() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     merged_data = cached  # type: ignore[arg-type]
 
     utf8_data = utf8_encode_dict(merged_data)
-    payload = {"data": utf8_data}
+    # Новое: формируем словарь с заполенными значениями шаблона
+    templated = render_data_to_api(merged_data)
+
+    # Применяем пользовательские overrides (редактируемые в UI)
+    doc_id = str(merged_data.get("ID") or merged_data.get("search_ID") or merged_data.get("RegistryID") or "")
+    templated.update(client.get_template_overrides(doc_id))
+
+    # Добавляем values внутрь данных, чтобы не отправлять их отдельным полем
+    utf8_data_with_values = dict(utf8_data)
+    utf8_data_with_values["values"] = templated
+
+    payload = {
+        "data": utf8_data_with_values,
+    }
     return payload, merged_data
 
 

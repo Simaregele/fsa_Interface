@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional, Union
 
 from config.config import load_config
 from src.auth.auth import authenticator
+from src.utils.json_path_registry import format_dates_inplace
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,9 @@ class FSAApiClient:
         self._last_search_response: Optional[Union[Dict[str, Any], list]] = None
         # здесь будем хранить результат последнего объединения данных поиска и деталей
         self._last_merged_data: Optional[Dict[str, Any]] = None
+        self._last_data_to_api: Optional[Dict[str, Any]] = None
+        # overrides для шаблонных значений (doc_id -> {key: value})
+        self._template_overrides: Dict[str, Dict[str, str]] = {}
 
     # --------------------------- Singleton helpers ---------------------------
     @classmethod
@@ -88,6 +92,9 @@ class FSAApiClient:
                 merged[f"search_{key}"] = value
                 if key == "TNVED":
                     merged["tnved_codes"] = value
+
+        # Приводим даты к формату DD.MM.YYYY (ин-плейс)
+        format_dates_inplace(merged)
 
         # кэшируем результат, чтобы переиспользовать без повторного объединения
         self._last_merged_data = merged
@@ -202,4 +209,19 @@ class FSAApiClient:
                         logger.warning("Путь '%s' недоступен в merged_data", path)
                         return
 
-        logger.info("Поле '%s' успешно обновлено в merged_data", path) 
+        logger.info("Поле '%s' успешно обновлено в merged_data", path)
+
+    # ---------------------------------------------------------------------
+    # Работа с пользовательскими overrides для шаблонных значений
+    # ---------------------------------------------------------------------
+
+    def get_template_overrides(self, doc_id: str) -> Dict[str, str]:
+        """Возвращает dict overrides для конкретного *doc_id*."""
+        return self._template_overrides.get(doc_id, {})
+
+    def upsert_template_value(self, doc_id: str, key: str, value: str) -> None:  # noqa: D401
+        """Создаёт/обновляет значение шаблона в overrides."""
+        if doc_id not in self._template_overrides:
+            self._template_overrides[doc_id] = {}
+        self._template_overrides[doc_id][key] = value
+        logger.info("Override шаблона обновлён: doc_id=%s, key=%s, value=%s", doc_id, key, value) 
